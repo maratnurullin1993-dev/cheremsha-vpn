@@ -28,13 +28,17 @@ class Settings(BaseSettings):
 
     vpn_node_name: str = "Personal Node"
     vpn_country: str = "NL"
+    vpn_protocol: str = "vless"
     vpn_host: str = ""
     vpn_port: int | None = None
+    vpn_network: str = "tcp"
+    vpn_security: str = "reality"
+    vpn_ws_path: str = ""
     vpn_sni: str = ""
     vpn_server_name: str = ""
     vpn_public_key: str = ""
     vpn_short_id: str = ""
-    vpn_flow: str = "xtls-rprx-vision"
+    vpn_flow: str = ""
     default_days: int = 30
 
     xray_config_path: str = ""
@@ -55,6 +59,12 @@ class Settings(BaseSettings):
 
     def reality_sni(self) -> str:
         return self.vpn_sni.strip() or self.vpn_server_name.strip()
+
+    def vpn_network_value(self) -> str:
+        return self.vpn_network.strip().lower()
+
+    def vpn_security_value(self) -> str:
+        return self.vpn_security.strip().lower()
 
     def subscription_base_url(self) -> str:
         public_url = self.public_base_url.strip().rstrip("/")

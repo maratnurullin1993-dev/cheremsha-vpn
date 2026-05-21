@@ -54,13 +54,15 @@ ADMIN_IDS=218032420,996045307
 ADMIN_API_TOKEN=change_me_to_long_random_value
 WEBAPP_URL=https://your-domain.example
 PUBLIC_BASE_URL=https://your-domain.example
-VPN_HOST=vpn.example.com
-VPN_PORT=443
-VPN_PUBLIC_KEY=your_reality_public_key
-VPN_SHORT_ID=your_reality_short_id
-VPN_SNI=www.microsoft.com
+VPN_PROTOCOL=vless
+VPN_HOST=78.17.76.184
+VPN_PORT=8443
+VPN_NETWORK=ws
+VPN_SECURITY=none
+VPN_WS_PATH=/
+VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/etc/xray/config.json
-XRAY_RESTART_COMMAND=systemctl restart xray
+XRAY_RESTART_COMMAND=
 ```
 
 Use `DEV_MODE=true` only for local development. On VPS use `DEV_MODE=false`.
@@ -111,7 +113,31 @@ Each Telegram user has at most one active VPN UUID. The active UUID is stored on
 
 When a user already has an active key, the app reuses that UUID and shows the existing key data. It must not create a new UUID on every login or every mini app open: doing that would leave old clients in Xray, break existing device profiles, and inflate the active key count.
 
-When access is expired or disabled, a new paid activation can create a new UUID. On creation the app stores the UUID in SQLite, adds it to `XRAY_CONFIG_PATH`, runs `XRAY_RESTART_COMMAND`, and returns the personal VLESS link.
+When access is expired or disabled, a new paid activation can create a new UUID. On creation the app adds the UUID to `XRAY_CONFIG_PATH`, stores the key in SQLite, optionally runs `XRAY_RESTART_COMMAND`, and returns the personal VLESS link.
+
+For the current x-ui VLESS over WebSocket inbound, use:
+
+```env
+VPN_PROTOCOL=vless
+VPN_HOST=78.17.76.184
+VPN_PORT=8443
+VPN_NETWORK=ws
+VPN_SECURITY=none
+VPN_WS_PATH=/
+VPN_FLOW=
+```
+
+Current production mode is VLESS over WebSocket without Reality:
+
+```text
+vless://UUID@78.17.76.184:8443?type=ws&security=none&path=%2F&encryption=none#NAME
+```
+
+Do not set Reality fields for this mode. `pbk`, `sni`, `sid`, and `flow` are not added when `VPN_SECURITY=none`.
+
+If `VPN_NETWORK=ws` and `VPN_WS_PATH` is empty, the app reads the WebSocket path from the Xray config inbound when present.
+
+For Reality only, set `VPN_SECURITY=reality` and provide `VPN_PUBLIC_KEY`, `VPN_SHORT_ID`, `VPN_SNI`, and `VPN_FLOW` if your inbound requires flow.
 
 For local development, leave `XRAY_CONFIG_PATH=` empty. In that mode the key is created only in SQLite and Xray is not changed.
 

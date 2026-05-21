@@ -28,21 +28,30 @@ def last_provisioning_error() -> str | None:
 def config_status() -> dict:
     settings = get_settings()
     values = {
+        "VPN_PROTOCOL": settings.vpn_protocol.strip(),
         "VPN_HOST": settings.vpn_host.strip(),
         "VPN_PORT": settings.vpn_port,
-        "VPN_PUBLIC_KEY": settings.vpn_public_key.strip(),
-        "VPN_SHORT_ID": settings.vpn_short_id.strip(),
-        "VPN_SNI": settings.reality_sni(),
-        "VPN_FLOW": settings.vpn_flow.strip(),
+        "VPN_NETWORK": settings.vpn_network_value(),
+        "VPN_SECURITY": settings.vpn_security_value(),
         "XRAY_CONFIG_PATH": settings.xray_config_path.strip(),
-        "XRAY_RESTART_COMMAND": settings.xray_restart_command.strip(),
-        "PUBLIC_BASE_URL_OR_WEBAPP_URL": settings.subscription_base_url(),
+        "WEBAPP_URL": settings.webapp_url.strip(),
     }
+    if settings.vpn_security_value() == "reality":
+        values.update(
+            {
+                "VPN_PUBLIC_KEY": settings.vpn_public_key.strip(),
+                "VPN_SHORT_ID": settings.vpn_short_id.strip(),
+                "VPN_SNI": settings.reality_sni(),
+            }
+        )
     missing = [key for key, value in values.items() if value in ("", None)]
+    value_status = {key: bool(value) for key, value in values.items()}
+    value_status["VPN_FLOW"] = bool(settings.vpn_flow.strip())
+    value_status["VPN_WS_PATH"] = bool(settings.vpn_ws_path.strip() or xray.ws_path_from_config())
     return {
         "ok": not missing,
         "missing": missing,
-        "values": {key: bool(value) for key, value in values.items()},
+        "values": value_status,
     }
 
 
@@ -57,17 +66,28 @@ def build_vless_uri(key: dict) -> str:
     validate_vpn_config()
     settings = get_settings()
     label = quote(key.get("label") or label_for_user(key))
+    network = settings.vpn_network_value()
+    security = settings.vpn_security_value()
     params = {
-        "type": "tcp",
-        "security": "reality",
-        "pbk": key.get("public_key") or settings.vpn_public_key,
-        "fp": "chrome",
-        "sni": key.get("sni") or settings.reality_sni(),
-        "sid": key.get("short_id") or settings.vpn_short_id,
-        "spx": "/",
-        "flow": key.get("flow") or settings.vpn_flow,
+        "type": network,
+        "security": security,
         "encryption": "none",
     }
+    if network == "ws":
+        params["path"] = settings.vpn_ws_path.strip() or xray.ws_path_from_config()
+    if security == "reality":
+        params.update(
+            {
+                "pbk": key.get("public_key") or settings.vpn_public_key,
+                "fp": "chrome",
+                "sni": key.get("sni") or settings.reality_sni(),
+                "sid": key.get("short_id") or settings.vpn_short_id,
+                "spx": "/",
+            }
+        )
+    flow = (key.get("flow") or settings.vpn_flow).strip()
+    if flow and security == "reality":
+        params["flow"] = flow
     query = urlencode(params)
     host = key.get("server_host") or settings.vpn_host
     port = key.get("server_port") or settings.vpn_port
@@ -80,7 +100,7 @@ def build_subscription(key: dict) -> str:
 
 
 def subscription_url(token: str) -> str:
-    base = get_settings().subscription_base_url()
+    base = get_settings().webapp_url.strip().rstrip("/")
     return f"{base}/sub/{token}"
 
 
@@ -177,8 +197,12 @@ def ensure_configured_key(user: dict) -> None:
     if not user.get("uuid"):
         raise VpnProvisioningError("VPN key UUID is missing")
     uri = build_vless_uri(user)
-    if f"@:{get_settings().vpn_port}" in uri or "pbk=&" in uri or "sni=&" in uri or "sid=&" in uri:
+    if f"@:{get_settings().vpn_port}" in uri:
         raise VpnProvisioningError("Generated VLESS URI is invalid")
+    if get_settings().vpn_security_value() != "reality" and any(part in uri for part in ("pbk=", "sni=", "sid=", "flow=")):
+        raise VpnProvisioningError("Generated non-Reality VLESS URI contains Reality-only parameters")
+    if get_settings().vpn_security_value() == "reality" and ("pbk=&" in uri or "sni=&" in uri or "sid=&" in uri):
+        raise VpnProvisioningError("Generated Reality VLESS URI is invalid")
     if not xray.has_client(user["uuid"]):
         raise VpnProvisioningError("VPN backend client is missing in Xray config")
 

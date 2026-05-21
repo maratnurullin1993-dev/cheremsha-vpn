@@ -20,9 +20,6 @@ def add_client(user: dict) -> dict[str, Any]:
     settings = get_settings()
     if not settings.xray_config_path:
         raise RuntimeError("XRAY_CONFIG_PATH is required to create a real Xray client")
-    if not settings.xray_restart_command.strip():
-        raise RuntimeError("XRAY_RESTART_COMMAND is required to activate a real Xray client")
-
     path = Path(settings.xray_config_path)
     if not path.exists():
         raise RuntimeError(f"Xray config not found: {path}")
@@ -31,8 +28,9 @@ def add_client(user: dict) -> dict[str, Any]:
     client = {
         "id": user["uuid"],
         "email": f"telegram_{user['telegram_id']}",
-        "flow": settings.vpn_flow,
     }
+    if settings.vpn_security_value() == "reality" and settings.vpn_flow.strip():
+        client["flow"] = settings.vpn_flow.strip()
     added = 0
     already_present = False
     for inbound in config.get("inbounds", []):
@@ -53,12 +51,33 @@ def add_client(user: dict) -> dict[str, Any]:
     if added:
         _save_config(path, config)
         restart_result = restart_xray()
-        if restart_result["status"] != "ok":
+        if restart_result["status"] not in ("ok", "skipped"):
             raise RuntimeError(f"Xray restart failed: {restart_result}")
     else:
         restart_result = {"status": "skipped", "reason": "client already exists"}
 
     return {"status": "ok", "added": added, "restart": restart_result}
+
+
+def ws_path_from_config() -> str:
+    settings = get_settings()
+    if not settings.xray_config_path:
+        return ""
+
+    path = Path(settings.xray_config_path)
+    if not path.exists():
+        return ""
+
+    config = _load_config(path)
+    for inbound in config.get("inbounds", []):
+        if inbound.get("protocol") != "vless":
+            continue
+        stream_settings = inbound.get("streamSettings", {})
+        if stream_settings.get("network") != "ws":
+            continue
+        ws_settings = stream_settings.get("wsSettings", {})
+        return str(ws_settings.get("path") or "")
+    return ""
 
 
 def has_client(uuid_value: str) -> bool:
