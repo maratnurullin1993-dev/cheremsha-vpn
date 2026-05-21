@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     webapp_url: str = "http://localhost:8000"
 
     bot_token: str = ""
+    telegram_bot_url: str = "https://t.me/"
     telegram_proxy_url: str = ""
     admin_id: int = 0
+    admin_ids: str = ""
     admin_api_token: str = Field(default="change_me")
 
     database_path: str = "data/app.sqlite3"
@@ -48,6 +50,21 @@ class Settings(BaseSettings):
         if value == "":
             return 443
         return value
+
+    def admin_id_values(self) -> set[int]:
+        values = {self.admin_id} if self.admin_id else set()
+        for raw_id in self.admin_ids.split(","):
+            raw_id = raw_id.strip()
+            if raw_id:
+                values.add(int(raw_id))
+        return values
+
+    def is_admin(self, telegram_id: int) -> bool:
+        return telegram_id in self.admin_id_values()
+
+    def default_admin_id(self) -> int:
+        values = sorted(self.admin_id_values())
+        return values[0] if values else 0
 
 
 @lru_cache

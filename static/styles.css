@@ -76,11 +76,132 @@ button.mini {
 
 .browser-placeholder {
   color: var(--text);
-  display: grid;
+  display: none;
   min-height: 100vh;
   place-items: center;
   padding: 24px;
   text-align: center;
+}
+
+.landing-page {
+  display: grid;
+  min-height: 100vh;
+  overflow: hidden;
+  place-items: center;
+  position: relative;
+}
+
+.landing-page::before {
+  animation: landingGlow 9s ease-in-out infinite alternate;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(167, 238, 233, 0.16), transparent 28rem),
+    radial-gradient(circle at 76% 18%, rgba(158, 143, 176, 0.13), transparent 24rem);
+  content: "";
+  inset: -20%;
+  position: absolute;
+}
+
+.landing-grid {
+  animation: gridDrift 18s linear infinite;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 42px 42px;
+  inset: 0;
+  mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 74%, transparent);
+  opacity: 0.32;
+  position: absolute;
+}
+
+.landing-hero {
+  padding: 28px 22px;
+  position: relative;
+  text-align: center;
+  z-index: 2;
+}
+
+.landing-kicker {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.landing-hero h1 {
+  font-size: clamp(42px, 14vw, 82px);
+  line-height: 0.95;
+  margin: 0;
+  text-shadow: 0 0 36px rgba(167, 238, 233, 0.16);
+  white-space: normal;
+}
+
+.landing-subtitle {
+  color: var(--muted);
+  font-size: clamp(17px, 4.4vw, 22px);
+  margin: 18px auto 26px;
+  max-width: 340px;
+}
+
+.landing-button {
+  align-items: center;
+  background: linear-gradient(135deg, #dffbf7, #8fd3d5);
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(143, 211, 213, 0.2), 0 0 32px rgba(167, 238, 233, 0.1);
+  color: #051010;
+  display: inline-flex;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 58px;
+  padding: 0 22px;
+  text-decoration: none;
+}
+
+.landing-mascot {
+  animation: mascotFloat 6s ease-in-out infinite;
+  bottom: 6vh;
+  filter: grayscale(0.18) saturate(0.95) drop-shadow(0 0 36px rgba(167, 238, 233, 0.12));
+  max-width: 430px;
+  opacity: 0.2;
+  pointer-events: none;
+  position: fixed;
+  right: -120px;
+  width: 86vw;
+  z-index: 1;
+}
+
+@keyframes landingGlow {
+  from {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes gridDrift {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 42px 84px;
+  }
+}
+
+@keyframes mascotFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-2deg);
+  }
+
+  50% {
+    transform: translate3d(-8px, -18px, 0) rotate(1deg);
+  }
 }
 
 button:disabled {

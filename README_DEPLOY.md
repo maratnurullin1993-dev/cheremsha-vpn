@@ -46,8 +46,10 @@ Then edit `.env` and set real values:
 
 ```env
 BOT_TOKEN=your_bot_token
+TELEGRAM_BOT_URL=https://t.me/your_bot_username
 TELEGRAM_PROXY_URL=
 ADMIN_ID=your_telegram_user_id
+ADMIN_IDS=218032420,996045307
 ADMIN_API_TOKEN=change_me_to_long_random_value
 WEBAPP_URL=https://your-domain.example
 PUBLIC_BASE_URL=https://your-domain.example
@@ -118,6 +120,7 @@ Set your Telegram user id in `.env`:
 
 ```env
 ADMIN_ID=123456789
+ADMIN_IDS=123456789,987654321
 ```
 
 Open the Mini App from that Telegram account. The app will show an `Админ` block with the `Выдать тестовый доступ` button.
@@ -128,7 +131,7 @@ The button calls:
 POST /api/admin/grant-test-access
 ```
 
-The endpoint validates Telegram Mini App `initData`, compares the authenticated `telegram_user_id` with `ADMIN_ID`, and grants test VPN access without Telegram Stars.
+The endpoint validates Telegram Mini App `initData`, compares the authenticated `telegram_user_id` with `ADMIN_IDS` plus legacy `ADMIN_ID`, and grants test access without Telegram Stars.
 
 Test access parameters:
 
@@ -141,9 +144,9 @@ If the admin already has an active VPN key, the endpoint does not create a secon
 
 ## Admin Panel
 
-The Mini App shows the `Админ` button only to the Telegram account whose `telegram_user_id` equals `ADMIN_ID` from `.env`.
+The Mini App shows the `Админ` button only to Telegram accounts whose `telegram_user_id` is listed in `ADMIN_IDS` from `.env`. Legacy `ADMIN_ID` also works as a fallback.
 
-Admin panel endpoints use Telegram Mini App `initData` authentication and also compare the authenticated Telegram user id with `ADMIN_ID`. Regular users do not see the admin button and receive `403` from admin panel API calls.
+Admin panel endpoints use Telegram Mini App `initData` authentication and also compare the authenticated Telegram user id with `ADMIN_IDS` plus legacy `ADMIN_ID`. Regular users do not see the admin button and receive `403` from admin panel API calls.
 
 The panel shows users with:
 

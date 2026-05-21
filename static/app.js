@@ -18,12 +18,21 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 if (!state.initData) {
+  document.title = "ClubRU Access";
   $("appShell")?.remove();
-  throw new Error("Telegram WebApp initData is required");
+  fetch("/api/public-config")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((config) => {
+      if (config?.telegram_bot_url) {
+        $("telegramOpenLink").href = config.telegram_bot_url;
+      }
+    })
+    .catch(() => {});
+} else {
+  $("landingPage")?.remove();
+  $("browserPlaceholder")?.remove();
+  $("appShell").classList.remove("hidden");
 }
-
-$("browserPlaceholder")?.remove();
-$("appShell").classList.remove("hidden");
 
 function headers(extra = {}) {
   return state.initData ? { "X-Telegram-Init-Data": state.initData, ...extra } : extra;
@@ -388,7 +397,9 @@ document.addEventListener("click", async (event) => {
   }
 });
 
-Promise.all([loadMe(), loadDevices(), loadPlans()]).catch((error) => {
-  console.error(error);
-  toast("Ошибка загрузки");
-});
+if (state.initData) {
+  Promise.all([loadMe(), loadDevices(), loadPlans()]).catch((error) => {
+    console.error(error);
+    toast("Ошибка загрузки");
+  });
+}

@@ -66,18 +66,18 @@ def upsert_from_message(message: Message) -> dict:
         telegram_id=user.id,
         username=user.username,
         first_name=user.first_name,
-        is_admin=user.id == settings.admin_id,
+        is_admin=settings.is_admin(user.id),
     )
 
 
 def is_admin_message(message: Message) -> bool:
     settings = get_settings()
-    return bool(message.from_user and settings.admin_id and message.from_user.id == settings.admin_id)
+    return bool(message.from_user and settings.is_admin(message.from_user.id))
 
 
 def is_admin_callback(callback: CallbackQuery) -> bool:
     settings = get_settings()
-    return bool(callback.from_user and settings.admin_id and callback.from_user.id == settings.admin_id)
+    return bool(callback.from_user and settings.is_admin(callback.from_user.id))
 
 
 @router.message(CommandStart())
@@ -158,7 +158,7 @@ async def successful_payment(message: Message) -> None:
         telegram_id=tg_user.id,
         username=tg_user.username,
         first_name=tg_user.first_name,
-        is_admin=tg_user.id == settings.admin_id,
+        is_admin=settings.is_admin(tg_user.id),
     )
     payment_info = message.successful_payment
     payment = db.get_payment_by_payload(payment_info.invoice_payload)

@@ -99,6 +99,11 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/public-config")
+async def public_config() -> dict:
+    return {"telegram_bot_url": settings.telegram_bot_url}
+
+
 @app.get("/api/me")
 async def me(user: dict = Depends(current_user)) -> dict:
     node = vpn.node_status()
