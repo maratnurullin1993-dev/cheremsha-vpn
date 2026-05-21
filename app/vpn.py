@@ -88,7 +88,7 @@ def build_vless_uri(key: dict) -> str:
     if flow and security == "reality":
         params["flow"] = flow
     params["encryption"] = "none"
-    query = urlencode(params)
+    query = urlencode(params, safe="/")
     host = key.get("server_host") or settings.vpn_host
     port = key.get("server_port") or settings.vpn_port
     return f"vless://{key['uuid']}@{host}:{port}?{query}#{label}"
@@ -222,7 +222,8 @@ def latest_key_debug() -> dict | None:
 def activate_or_extend_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
     active_days = days or get_settings().default_days
     if db.user_vpn_status(user) == "active" and user.get("uuid"):
-        ensure_configured_key(user)
+        if not xray.has_client(user["uuid"]):
+            return recreate_user_key(user, active_days, traffic_limit_gb)
         return db.extend_user_access(user["id"], active_days, traffic_limit_gb)
     return create_or_replace_user_key(user, active_days, traffic_limit_gb)
 

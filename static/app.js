@@ -196,16 +196,6 @@ function renderAdminUserCard() {
 }
 
 function renderPlans() {
-  if (state.capacity?.is_full) {
-    $("plansList").innerHTML = `
-      <div class="no-slots">
-        <strong>Свободных мест нет</strong>
-        <span>Сервер заполнен. Напиши в поддержку, если нужен доступ.</span>
-        <button class="secondary" data-support>Написать в поддержку</button>
-      </div>
-    `;
-    return;
-  }
   $("plansList").innerHTML = state.plans
     .map(
       (plan) => `
@@ -313,9 +303,7 @@ async function buyPlan(planId) {
       body: JSON.stringify({ plan_id: planId }),
     });
   } catch (error) {
-    state.capacity = { ...(state.capacity || {}), is_full: true };
-    renderPlans();
-    toast("Свободных мест нет");
+    toast("Ошибка оплаты");
     return;
   }
 

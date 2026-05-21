@@ -37,8 +37,6 @@ async def create_stars_invoice(user: dict, plan_id: str) -> dict:
         raise ValueError("Unknown plan")
     if not settings.bot_token:
         raise RuntimeError("BOT_TOKEN is required for Telegram Stars invoices")
-    if db.user_vpn_status(user) != "active" and db.active_keys_count() >= settings.max_active_keys:
-        raise RuntimeError("No free slots")
     if db.user_vpn_status(user) != "active":
         from app import vpn
 

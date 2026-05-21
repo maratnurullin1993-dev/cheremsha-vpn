@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     xray_config_path: str = ""
     xray_restart_command: str = ""
 
+    max_users: int = 20
     max_active_keys: int = 20
     default_7d_traffic_gb: int = 10
     default_30d_traffic_gb: int = 50

@@ -63,6 +63,7 @@ VPN_WS_PATH=/
 VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/etc/xray/config.json
 XRAY_RESTART_COMMAND=
+MAX_USERS=20
 ```
 
 Use `DEV_MODE=true` only for local development. On VPS use `DEV_MODE=false`.

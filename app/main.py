@@ -132,15 +132,12 @@ async def create_key(payload: CreateKeyPayload, user: dict = Depends(current_use
 
 @app.post("/api/admin/grant-test-access")
 async def admin_grant_test_access(user: dict = Depends(require_telegram_admin_user)) -> dict:
-    if db.user_vpn_status(user) == "active":
-        updated = user
-    else:
-        try:
-            updated = vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
-        except vpn.VpnProvisioningError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+    try:
+        updated = vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     db.log_event(
         event_type="admin_test_access",
         user_id=updated["id"],
@@ -182,7 +179,7 @@ async def admin_panel_grant_test_access(user_id: int, admin: dict = Depends(requ
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     try:
-        updated = user if db.user_vpn_status(user) == "active" else vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+        updated = vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
     except vpn.VpnProvisioningError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -276,9 +273,8 @@ async def current_key(user: dict = Depends(current_user)) -> dict:
 @app.get("/api/payments/plans")
 async def payment_plans(user: dict = Depends(current_user)) -> dict:
     capacity = capacity_summary()
-    is_active_user = db.user_vpn_status(user) == "active"
     return {
-        "plans": [] if capacity["is_full"] and not is_active_user else [payments.get_plan("7d"), payments.get_plan("30d")],
+        "plans": [payments.get_plan("7d"), payments.get_plan("30d")],
         "capacity": capacity,
         "support_url": settings.support_url,
     }
@@ -289,8 +285,6 @@ async def payment_invoice(payload: InvoicePayload, user: dict = Depends(current_
     plan = payments.get_plan(payload.plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
-    if db.user_vpn_status(user) != "active" and capacity_summary()["available"] <= 0:
-        raise HTTPException(status_code=409, detail="No free slots")
     try:
         return await payments.create_stars_invoice(user, payload.plan_id)
     except httpx.HTTPStatusError as exc:
@@ -535,7 +529,7 @@ def admin_user_detail(user: dict) -> dict:
 
 def capacity_summary() -> dict:
     active = db.active_keys_count()
-    max_keys = settings.max_active_keys
+    max_keys = settings.max_users
     return {
         "active": active,
         "max": max_keys,

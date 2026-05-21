@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -22,7 +22,7 @@ def start_keyboard() -> InlineKeyboardMarkup:
     settings = get_settings()
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Открыть VPN", web_app=WebAppInfo(url=settings.webapp_url))]
+            [InlineKeyboardButton(text="РћС‚РєСЂС‹С‚СЊ VPN", web_app=WebAppInfo(url=settings.webapp_url))]
         ]
     )
 
@@ -30,12 +30,12 @@ def start_keyboard() -> InlineKeyboardMarkup:
 def main_keyboard() -> InlineKeyboardMarkup:
     settings = get_settings()
     rows = [
-        [InlineKeyboardButton(text="Открыть VPN", web_app=WebAppInfo(url=settings.webapp_url))],
-        [InlineKeyboardButton(text="Получить доступ", web_app=WebAppInfo(url=settings.webapp_url))],
-        [InlineKeyboardButton(text="Мои устройства", callback_data="devices")],
+        [InlineKeyboardButton(text="РћС‚РєСЂС‹С‚СЊ VPN", web_app=WebAppInfo(url=settings.webapp_url))],
+        [InlineKeyboardButton(text="РџРѕР»СѓС‡РёС‚СЊ РґРѕСЃС‚СѓРї", web_app=WebAppInfo(url=settings.webapp_url))],
+        [InlineKeyboardButton(text="РњРѕРё СѓСЃС‚СЂРѕР№СЃС‚РІР°", callback_data="devices")],
         [
-            InlineKeyboardButton(text="Инструкция", callback_data="guide"),
-            InlineKeyboardButton(text="Поддержка", url=settings.support_url),
+            InlineKeyboardButton(text="РРЅСЃС‚СЂСѓРєС†РёСЏ", callback_data="guide"),
+            InlineKeyboardButton(text="РџРѕРґРґРµСЂР¶РєР°", url=settings.support_url),
         ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -44,8 +44,8 @@ def main_keyboard() -> InlineKeyboardMarkup:
 def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Обновить", callback_data="admin_refresh")],
-            [InlineKeyboardButton(text="Отключить пользователя позже", callback_data="admin_disable_later")],
+            [InlineKeyboardButton(text="РћР±РЅРѕРІРёС‚СЊ", callback_data="admin_refresh")],
+            [InlineKeyboardButton(text="РћС‚РєР»СЋС‡РёС‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РїРѕР·Р¶Рµ", callback_data="admin_disable_later")],
         ]
     )
 
@@ -53,9 +53,9 @@ def admin_keyboard() -> InlineKeyboardMarkup:
 def admin_text() -> str:
     settings = get_settings()
     return (
-        "Админ-панель\n"
-        f"Активных ключей: {db.active_keys_count()} / {settings.max_active_keys}\n"
-        f"Пользователей в базе: {db.users_count()}"
+        "РђРґРјРёРЅ-РїР°РЅРµР»СЊ\n"
+        f"РђРєС‚РёРІРЅС‹С… РєР»СЋС‡РµР№: {db.active_keys_count()} / {settings.max_users}\n"
+        f"РџРѕР»СЊР·РѕРІР°С‚РµР»РµР№ РІ Р±Р°Р·Рµ: {db.users_count()}"
     )
 
 
@@ -83,7 +83,7 @@ def is_admin_callback(callback: CallbackQuery) -> bool:
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     upsert_from_message(message)
-    await message.answer("ЧЕРЕМША VPN", reply_markup=start_keyboard())
+    await message.answer("Р§Р•Р Р•РњРЁРђ VPN", reply_markup=start_keyboard())
 
 
 @router.message(Command("admin"))
@@ -100,7 +100,7 @@ async def admin_refresh(callback: CallbackQuery) -> None:
         await callback.answer()
         return
     await callback.message.edit_text(admin_text(), reply_markup=admin_keyboard())
-    await callback.answer("Обновлено")
+    await callback.answer("РћР±РЅРѕРІР»РµРЅРѕ")
 
 
 @router.callback_query(F.data == "admin_disable_later")
@@ -108,13 +108,13 @@ async def admin_disable_later(callback: CallbackQuery) -> None:
     if not is_admin_callback(callback):
         await callback.answer()
         return
-    await callback.answer("Позже добавим выбор пользователя", show_alert=True)
+    await callback.answer("РџРѕР·Р¶Рµ РґРѕР±Р°РІРёРј РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ", show_alert=True)
 
 
 @router.callback_query(F.data == "get_key")
 async def get_key(callback: CallbackQuery) -> None:
     await callback.message.answer(
-        "Открой mini app и выбери тариф. Доступ выдается после оплаты Stars.",
+        "РћС‚РєСЂРѕР№ mini app Рё РІС‹Р±РµСЂРё С‚Р°СЂРёС„. Р”РѕСЃС‚СѓРї РІС‹РґР°РµС‚СЃСЏ РїРѕСЃР»Рµ РѕРїР»Р°С‚С‹ Stars.",
         reply_markup=main_keyboard(),
     )
     await callback.answer()
@@ -123,12 +123,12 @@ async def get_key(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "devices")
 async def devices(callback: CallbackQuery) -> None:
     await callback.message.answer(
-        "Устройства:\n"
-        "iPhone: FoXray или Streisand\n"
+        "РЈСЃС‚СЂРѕР№СЃС‚РІР°:\n"
+        "iPhone: FoXray РёР»Рё Streisand\n"
         "Android: v2rayNG\n"
         "Windows: Nekoray\n"
-        "Mac: FoXray или V2Box\n\n"
-        "Открой mini app, там есть QR и кнопки копирования.",
+        "Mac: FoXray РёР»Рё V2Box\n\n"
+        "РћС‚РєСЂРѕР№ mini app, С‚Р°Рј РµСЃС‚СЊ QR Рё РєРЅРѕРїРєРё РєРѕРїРёСЂРѕРІР°РЅРёСЏ.",
         reply_markup=main_keyboard(),
     )
     await callback.answer()
@@ -145,9 +145,8 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
         and payment["status"] == "pending"
         and query.currency == "XTR"
         and query.total_amount == payment["stars"]
-        and (db.user_vpn_status(user) == "active" or db.active_keys_count() < get_settings().max_active_keys)
     )
-    await query.answer(ok=ok, error_message="Свободных мест нет или тариф изменился")
+    await query.answer(ok=ok, error_message="Tariff changed")
 
 
 @router.message(F.successful_payment)
@@ -164,12 +163,12 @@ async def successful_payment(message: Message) -> None:
     payment = db.get_payment_by_payload(payment_info.invoice_payload)
     if not payment or payment["user_id"] != user["id"]:
         await message.answer(
-            "Оплата получена, но платеж не найден. Напиши в поддержку.",
+            "РћРїР»Р°С‚Р° РїРѕР»СѓС‡РµРЅР°, РЅРѕ РїР»Р°С‚РµР¶ РЅРµ РЅР°Р№РґРµРЅ. РќР°РїРёС€Рё РІ РїРѕРґРґРµСЂР¶РєСѓ.",
             reply_markup=main_keyboard(),
         )
         return
     if payment["status"] == "paid" and db.user_vpn_status(user) == "active":
-        await message.answer("Доступ уже активен. Открой mini app.", reply_markup=main_keyboard())
+        await message.answer("Р”РѕСЃС‚СѓРї СѓР¶Рµ Р°РєС‚РёРІРµРЅ. РћС‚РєСЂРѕР№ mini app.", reply_markup=main_keyboard())
         return
 
     db.complete_payment(
@@ -192,7 +191,7 @@ async def successful_payment(message: Message) -> None:
             metadata=payment_info.invoice_payload,
         )
         await message.answer(
-            "Оплата получена, но доступ не был создан из-за ошибки настройки сервера. Напиши в поддержку.",
+            "РћРїР»Р°С‚Р° РїРѕР»СѓС‡РµРЅР°, РЅРѕ РґРѕСЃС‚СѓРї РЅРµ Р±С‹Р» СЃРѕР·РґР°РЅ РёР·-Р·Р° РѕС€РёР±РєРё РЅР°СЃС‚СЂРѕР№РєРё СЃРµСЂРІРµСЂР°. РќР°РїРёС€Рё РІ РїРѕРґРґРµСЂР¶РєСѓ.",
             reply_markup=main_keyboard(),
         )
         return
@@ -204,7 +203,7 @@ async def successful_payment(message: Message) -> None:
         metadata=payment_info.invoice_payload,
     )
     await message.answer(
-        "Оплата прошла. Доступ активирован, QR и ключ уже доступны в mini app.",
+        "РћРїР»Р°С‚Р° РїСЂРѕС€Р»Р°. Р”РѕСЃС‚СѓРї Р°РєС‚РёРІРёСЂРѕРІР°РЅ, QR Рё РєР»СЋС‡ СѓР¶Рµ РґРѕСЃС‚СѓРїРЅС‹ РІ mini app.",
         reply_markup=main_keyboard(),
     )
 
@@ -212,11 +211,11 @@ async def successful_payment(message: Message) -> None:
 @router.callback_query(F.data == "guide")
 async def guide(callback: CallbackQuery) -> None:
     await callback.message.answer(
-        "Инструкция коротко:\n"
-        "1. Нажми «Открыть VPN».\n"
-        "2. Получи ключ.\n"
-        "3. Скопируй ссылку или открой QR.\n"
-        "4. Импортируй профиль в приложение для своего устройства.",
+        "РРЅСЃС‚СЂСѓРєС†РёСЏ РєРѕСЂРѕС‚РєРѕ:\n"
+        "1. РќР°Р¶РјРё В«РћС‚РєСЂС‹С‚СЊ VPNВ».\n"
+        "2. РџРѕР»СѓС‡Рё РєР»СЋС‡.\n"
+        "3. РЎРєРѕРїРёСЂСѓР№ СЃСЃС‹Р»РєСѓ РёР»Рё РѕС‚РєСЂРѕР№ QR.\n"
+        "4. РРјРїРѕСЂС‚РёСЂСѓР№ РїСЂРѕС„РёР»СЊ РІ РїСЂРёР»РѕР¶РµРЅРёРµ РґР»СЏ СЃРІРѕРµРіРѕ СѓСЃС‚СЂРѕР№СЃС‚РІР°.",
         reply_markup=main_keyboard(),
     )
     await callback.answer()
@@ -245,3 +244,5 @@ async def run_bot() -> None:
     finally:
         print("Telegram bot shutdown: closing bot session.")
         await bot.session.close()
+
+
