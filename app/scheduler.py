@@ -1,10 +1,10 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app import db, vpn, xray
+from app import db, vpn
 
 
 def _disable_user(user: dict, event_type: str, message: str) -> None:
-    result = xray.remove_client(user["uuid"])
+    result = vpn.remove_backend_key(user["uuid"])
     db.mark_user_disabled(user["id"])
     db.log_event(
         event_type=event_type,

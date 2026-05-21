@@ -328,7 +328,7 @@ async def key_qr(key_id: int, user: dict = Depends(current_user)) -> Response:
         raise HTTPException(status_code=404, detail="Key not found")
     if db.user_vpn_status(user) != "active":
         raise HTTPException(status_code=403, detail="VPN inactive")
-    png = make_qr_png(vpn.build_vless_uri(user))
+    png = make_qr_png(vpn.build_access_uri(user))
     return Response(content=png, media_type="image/png")
 
 
@@ -465,7 +465,7 @@ def decorate_key(key: dict | None) -> dict | None:
     if not key:
         return None
     decorated = dict(key)
-    decorated["vless_uri"] = vpn.build_vless_uri(key)
+    decorated["vless_uri"] = vpn.build_access_uri(key)
     decorated["subscription_url"] = vpn.subscription_url(key["subscription_token"])
     decorated["is_active"] = key["disabled_at"] is None
     return decorated
@@ -486,7 +486,7 @@ def decorate_vpn_user(user: dict | None) -> dict | None:
     decorated["remaining_traffic_gb"] = None if limit is None else max(limit - used, 0)
     if user.get("uuid"):
         try:
-            decorated["vless_uri"] = vpn.build_vless_uri(decorated)
+            decorated["vless_uri"] = vpn.build_access_uri(decorated)
         except (vpn.VpnProvisioningError, RuntimeError) as error:
             decorated["status"] = "config_error"
             decorated["is_active"] = False
