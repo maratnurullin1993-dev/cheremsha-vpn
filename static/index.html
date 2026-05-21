@@ -45,7 +45,7 @@
         <div class="section-title">
           <h2>Админ</h2>
         </div>
-        <button id="grantTestAccessBtn" class="secondary">Выдать тестовый доступ</button>
+        <button id="openAdminBtn" class="secondary">Админ</button>
       </section>
 
       <section class="key-panel glass">
@@ -77,6 +77,18 @@
             <button class="icon-button" data-close-plans aria-label="Закрыть">×</button>
           </div>
           <div class="plans-list" id="plansList"></div>
+        </section>
+      </div>
+
+      <div class="modal hidden" id="adminModal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-admin></div>
+        <section class="modal-sheet glass admin-sheet" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+          <div class="modal-head">
+            <h2 id="adminTitle">Админ</h2>
+            <button class="icon-button" data-close-admin aria-label="Закрыть">×</button>
+          </div>
+          <div class="admin-users" id="adminUsersList"></div>
+          <div class="admin-user-card hidden" id="adminUserCard"></div>
         </section>
       </div>
     </main>

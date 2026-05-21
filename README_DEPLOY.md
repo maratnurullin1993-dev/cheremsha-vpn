@@ -139,6 +139,32 @@ Test access parameters:
 
 If the admin already has an active VPN key, the endpoint does not create a second UUID. It returns the existing key, QR, expiry date, traffic balance, and connection instructions through the normal Mini App UI.
 
+## Admin Panel
+
+The Mini App shows the `Админ` button only to the Telegram account whose `telegram_user_id` equals `ADMIN_ID` from `.env`.
+
+Admin panel endpoints use Telegram Mini App `initData` authentication and also compare the authenticated Telegram user id with `ADMIN_ID`. Regular users do not see the admin button and receive `403` from admin panel API calls.
+
+The panel shows users with:
+
+- `telegram_user_id`
+- `username` / `first_name`
+- access status
+- expiry date
+- traffic limit
+- used traffic
+- device/key id
+
+User card actions:
+
+- grant test access
+- renew for 7 days
+- disable access
+- delete VPN key/device
+- show/copy VPN key
+
+The delete action is intentionally safe: it disables the device/key through the existing VPN disable path. If `XRAY_CONFIG_PATH` is configured, the UUID is removed from the Xray config; if it is not configured, the key is marked disabled in SQLite and is no longer treated as active.
+
 ## Update Through `git pull`
 
 ```bash

@@ -58,8 +58,29 @@ async def current_user(
     raise HTTPException(status_code=401, detail="Telegram WebApp auth required")
 
 
+async def require_telegram_admin_user(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict:
+    settings = get_settings()
+    init_data = x_telegram_init_data or request.query_params.get("initData")
+    if not init_data or not settings.bot_token:
+        raise HTTPException(status_code=401, detail="Telegram WebApp auth required")
+
+    tg_user = _validate_init_data(init_data, settings.bot_token)
+    telegram_id = int(tg_user["id"])
+    if not settings.admin_id or telegram_id != settings.admin_id:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    return db.upsert_user(
+        telegram_id=telegram_id,
+        username=tg_user.get("username"),
+        first_name=tg_user.get("first_name"),
+        is_admin=True,
+    )
+
+
 def require_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
     settings = get_settings()
     if not settings.admin_api_token or x_admin_token != settings.admin_api_token:
         raise HTTPException(status_code=403, detail="Admin token required")
-

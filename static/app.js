@@ -5,6 +5,8 @@ tg?.expand();
 const state = {
   user: null,
   key: null,
+  adminUsers: [],
+  selectedAdminUser: null,
   devices: [],
   plans: [],
   capacity: null,
@@ -103,6 +105,63 @@ function renderAdmin() {
   setVisible("adminPanel", Boolean(state.user?.is_admin));
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function adminName(user) {
+  return escapeHtml(user.username || user.first_name || `telegram ${user.telegram_user_id}`);
+}
+
+function formatTraffic(user) {
+  const limit = user.traffic_limit_gb ?? "∞";
+  return `${user.used_traffic_gb ?? 0} / ${limit} GB`;
+}
+
+function renderAdminUsers() {
+  $("adminUsersList").innerHTML = state.adminUsers
+    .map(
+      (user) => `
+        <button class="admin-user-row" data-admin-user="${user.id}">
+          <strong>${adminName(user)}</strong>
+          <span>ID: ${user.telegram_user_id} · ${user.status}</span>
+          <span>До: ${formatDate(user.expires_at)} · Трафик: ${formatTraffic(user)}</span>
+          <span>Device/key: ${user.device_id || user.key_id || "нет"}</span>
+        </button>
+      `,
+    )
+    .join("");
+}
+
+function renderAdminUserCard() {
+  const user = state.selectedAdminUser;
+  if (!user) {
+    setVisible("adminUserCard", false);
+    return;
+  }
+  $("adminUserCard").innerHTML = `
+    <strong>${adminName(user)}</strong>
+    <div class="admin-meta">Telegram ID: ${user.telegram_user_id}</div>
+    <div class="admin-meta">Статус: ${user.status}</div>
+    <div class="admin-meta">До: ${formatDate(user.expires_at)}</div>
+    <div class="admin-meta">Трафик: ${formatTraffic(user)}</div>
+    <div class="admin-meta">Device/key: ${user.device_id || user.key_id || "нет"}</div>
+    <div class="admin-actions">
+      <button class="secondary" data-admin-action="grant-test">Выдать тестовый доступ</button>
+      <button class="secondary" data-admin-action="renew-7d">Продлить на 7 дней</button>
+      <button class="secondary" data-admin-action="copy-key">Показать/скопировать VPN ключ</button>
+      <button class="secondary danger" data-admin-action="disable">Отключить доступ</button>
+      <button class="secondary danger" data-admin-action="delete-key">Удалить VPN ключ/device</button>
+    </div>
+  `;
+  setVisible("adminUserCard", true);
+}
+
 function renderPlans() {
   if (state.capacity?.is_full) {
     $("plansList").innerHTML = `
@@ -163,6 +222,15 @@ function renderHelp() {
 async function copyText(value, okMessage) {
   if (!value || !hasAccess()) {
     toast("Доступ не создан");
+    return;
+  }
+  await navigator.clipboard.writeText(value);
+  toast(okMessage);
+}
+
+async function copyRawText(value, okMessage) {
+  if (!value) {
+    toast("Ключ не создан");
     return;
   }
   await navigator.clipboard.writeText(value);
@@ -238,19 +306,6 @@ async function buyPlan(planId) {
   }
 }
 
-async function grantTestAccess() {
-  const button = $("grantTestAccessBtn");
-  button.disabled = true;
-  try {
-    const data = await api("/api/admin/grant-test-access", { method: "POST" });
-    state.key = data.key;
-    renderAccess();
-    toast(hasAccess() ? "Тестовый доступ активен" : "Доступ не создан");
-  } finally {
-    button.disabled = false;
-  }
-}
-
 function openHelp() {
   renderHelp();
   $("helpModal").classList.remove("hidden");
@@ -262,18 +317,70 @@ function closeHelp() {
   $("helpModal").setAttribute("aria-hidden", "true");
 }
 
+async function loadAdminUsers() {
+  const data = await api("/api/admin/panel/users");
+  state.adminUsers = data.users;
+  renderAdminUsers();
+}
+
+async function openAdmin() {
+  if (!state.user?.is_admin) return;
+  $("adminModal").classList.remove("hidden");
+  $("adminModal").setAttribute("aria-hidden", "false");
+  await loadAdminUsers();
+}
+
+function closeAdmin() {
+  $("adminModal").classList.add("hidden");
+  $("adminModal").setAttribute("aria-hidden", "true");
+  state.selectedAdminUser = null;
+  renderAdminUserCard();
+}
+
+async function openAdminUser(userId) {
+  const data = await api(`/api/admin/panel/users/${userId}`);
+  state.selectedAdminUser = data.user;
+  renderAdminUserCard();
+}
+
+async function adminAction(action) {
+  const user = state.selectedAdminUser;
+  if (!user) return;
+  if (action === "copy-key") {
+    await copyRawText(user.vless_uri, "VPN ключ скопирован");
+    return;
+  }
+  const endpoints = {
+    "grant-test": { path: `/api/admin/panel/users/${user.id}/grant-test-access`, method: "POST" },
+    "renew-7d": { path: `/api/admin/panel/users/${user.id}/renew-7d`, method: "POST" },
+    disable: { path: `/api/admin/panel/users/${user.id}/disable`, method: "POST" },
+    "delete-key": { path: `/api/admin/panel/users/${user.id}/key`, method: "DELETE" },
+  };
+  const endpoint = endpoints[action];
+  if (!endpoint) return;
+  const data = await api(endpoint.path, { method: endpoint.method });
+  state.selectedAdminUser = data.user;
+  renderAdminUserCard();
+  await loadAdminUsers();
+  await loadMe();
+  toast("Готово");
+}
+
 document.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
 
   if (target.id === "getKeyBtn") await getKey();
-  if (target.id === "grantTestAccessBtn") await grantTestAccess();
+  if (target.id === "openAdminBtn") await openAdmin();
   if (target.id === "copyKeyBtn") await copyText(state.key?.vless_uri, "VPN скопирован");
   if (target.id === "copySubBtn") await copyText(state.key?.subscription_url, "Автоссылка скопирована");
   if (target.id === "helpBtn") openHelp();
   if (target.dataset.closeModal !== undefined) closeHelp();
   if (target.dataset.closePlans !== undefined) closePlans();
+  if (target.dataset.closeAdmin !== undefined) closeAdmin();
   if (target.dataset.plan) await buyPlan(target.dataset.plan);
+  if (target.dataset.adminUser) await openAdminUser(target.dataset.adminUser);
+  if (target.dataset.adminAction) await adminAction(target.dataset.adminAction);
   if (target.dataset.support !== undefined && state.supportUrl) window.open(state.supportUrl, "_blank");
   if (target.dataset.device) {
     state.selectedDevice = target.dataset.device;

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import db, payments, vpn
-from app.auth import current_user, require_admin_token
+from app.auth import current_user, require_admin_token, require_telegram_admin_user
 from app.config import get_settings
 from app.qr import make_qr_png
 from app.scheduler import create_scheduler
@@ -121,9 +121,7 @@ async def create_key(payload: CreateKeyPayload, user: dict = Depends(current_use
 
 
 @app.post("/api/admin/grant-test-access")
-async def admin_grant_test_access(user: dict = Depends(current_user)) -> dict:
-    if not settings.admin_id or user["telegram_id"] != settings.admin_id:
-        raise HTTPException(status_code=403, detail="Admin access required")
+async def admin_grant_test_access(user: dict = Depends(require_telegram_admin_user)) -> dict:
     if db.user_vpn_status(user) == "active":
         updated = user
     else:
@@ -135,6 +133,83 @@ async def admin_grant_test_access(user: dict = Depends(current_user)) -> dict:
         message="Admin test access granted or reused",
     )
     return {"key": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
+
+
+@app.get("/api/admin/panel/users")
+async def admin_panel_users(admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    users = db.search_users()
+    return {
+        "users": [admin_user_summary(user) for user in users],
+        "capacity": capacity_summary(),
+    }
+
+
+@app.get("/api/admin/panel/users/{user_id}")
+async def admin_panel_user(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user": admin_user_detail(user)}
+
+
+@app.post("/api/admin/panel/users/{user_id}/grant-test-access")
+async def admin_panel_grant_test_access(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    updated = user if db.user_vpn_status(user) == "active" else vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+    db.log_event(
+        event_type="admin_panel_test_access",
+        user_id=updated["id"],
+        uuid_value=updated.get("uuid"),
+        message="Admin panel test access granted or reused",
+    )
+    return {"user": admin_user_detail(updated)}
+
+
+@app.post("/api/admin/panel/users/{user_id}/renew-7d")
+async def admin_panel_renew_7d(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    updated = vpn.activate_or_extend_user_key(user, days=7)
+    db.log_event(
+        event_type="admin_panel_renew_7d",
+        user_id=updated["id"],
+        uuid_value=updated.get("uuid"),
+        message="Admin panel renewed VPN access for 7 days",
+    )
+    return {"user": admin_user_detail(updated)}
+
+
+@app.post("/api/admin/panel/users/{user_id}/disable")
+async def admin_panel_disable(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    updated = vpn.disable_user_key(user)
+    db.log_event(
+        event_type="admin_panel_disable",
+        user_id=updated["id"],
+        uuid_value=user.get("uuid"),
+        message="Admin panel disabled VPN access",
+    )
+    return {"user": admin_user_detail(updated)}
+
+
+@app.delete("/api/admin/panel/users/{user_id}/key")
+async def admin_panel_delete_key(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    updated = vpn.disable_user_key(user)
+    db.log_event(
+        event_type="admin_panel_delete_key_safe_disable",
+        user_id=updated["id"],
+        uuid_value=user.get("uuid"),
+        message="Admin panel safe-disabled VPN device/key",
+    )
+    return {"user": admin_user_detail(updated)}
 
 
 @app.get("/api/keys/current")
@@ -355,6 +430,32 @@ def decorate_vpn_user(user: dict | None) -> dict | None:
     else:
         decorated["subscription_url"] = None
     return decorated
+
+
+def admin_user_summary(user: dict) -> dict:
+    decorated = decorate_vpn_user(user)
+    return {
+        "id": user["id"],
+        "telegram_user_id": user["telegram_id"],
+        "username": user.get("username"),
+        "first_name": user.get("first_name"),
+        "status": decorated["status"],
+        "expires_at": user.get("expires_at"),
+        "traffic_limit_gb": decorated["traffic_limit_gb"],
+        "used_traffic_gb": decorated["used_traffic_gb"],
+        "key_id": user["id"],
+        "device_id": user.get("uuid"),
+    }
+
+
+def admin_user_detail(user: dict) -> dict:
+    decorated = decorate_vpn_user(user)
+    return {
+        **admin_user_summary(user),
+        "remaining_traffic_gb": decorated["remaining_traffic_gb"],
+        "vless_uri": decorated["vless_uri"],
+        "subscription_url": decorated["subscription_url"],
+    }
 
 
 def capacity_summary() -> dict:
