@@ -63,34 +63,20 @@ def validate_vpn_config() -> None:
 
 
 def build_vless_uri(key: dict) -> str:
-    validate_vpn_config()
     settings = get_settings()
     label = quote(key.get("label") or label_for_user(key))
-    network = settings.vpn_network_value()
-    security = settings.vpn_security_value()
+    host = settings.vpn_host or key.get("server_host")
+    port = settings.vpn_port or key.get("server_port")
+    path = settings.vpn_ws_path.strip() or xray.ws_path_from_config() or "/"
+    if not key.get("uuid") or not host or not port:
+        raise VpnProvisioningError("Generated VLESS URI is invalid")
     params = {
-        "type": network,
-        "security": security,
+        "type": "ws",
+        "security": "none",
+        "path": path,
+        "encryption": "none",
     }
-    if network == "ws":
-        params["path"] = settings.vpn_ws_path.strip() or xray.ws_path_from_config()
-    if security == "reality":
-        params.update(
-            {
-                "pbk": key.get("public_key") or settings.vpn_public_key,
-                "fp": "chrome",
-                "sni": key.get("sni") or settings.reality_sni(),
-                "sid": key.get("short_id") or settings.vpn_short_id,
-                "spx": "/",
-            }
-        )
-    flow = (key.get("flow") or settings.vpn_flow).strip()
-    if flow and security == "reality":
-        params["flow"] = flow
-    params["encryption"] = "none"
-    query = urlencode(params, safe="/")
-    host = key.get("server_host") or settings.vpn_host
-    port = key.get("server_port") or settings.vpn_port
+    query = urlencode(params)
     return f"vless://{key['uuid']}@{host}:{port}?{query}#{label}"
 
 
