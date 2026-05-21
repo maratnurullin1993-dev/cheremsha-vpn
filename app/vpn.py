@@ -71,7 +71,6 @@ def build_vless_uri(key: dict) -> str:
     params = {
         "type": network,
         "security": security,
-        "encryption": "none",
     }
     if network == "ws":
         params["path"] = settings.vpn_ws_path.strip() or xray.ws_path_from_config()
@@ -88,6 +87,7 @@ def build_vless_uri(key: dict) -> str:
     flow = (key.get("flow") or settings.vpn_flow).strip()
     if flow and security == "reality":
         params["flow"] = flow
+    params["encryption"] = "none"
     query = urlencode(params)
     host = key.get("server_host") or settings.vpn_host
     port = key.get("server_port") or settings.vpn_port
@@ -225,6 +225,14 @@ def activate_or_extend_user_key(user: dict, days: int | None = None, traffic_lim
         ensure_configured_key(user)
         return db.extend_user_access(user["id"], active_days, traffic_limit_gb)
     return create_or_replace_user_key(user, active_days, traffic_limit_gb)
+
+
+def recreate_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
+    if user.get("uuid"):
+        xray.remove_client(user["uuid"])
+        db.mark_user_disabled(user["id"])
+        user = db.get_user(user["id"]) or user
+    return create_or_replace_user_key(user, days, traffic_limit_gb)
 
 
 def disable_user_key(user: dict) -> dict:

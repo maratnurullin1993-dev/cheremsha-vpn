@@ -29,11 +29,11 @@ class Settings(BaseSettings):
     vpn_node_name: str = "Personal Node"
     vpn_country: str = "NL"
     vpn_protocol: str = "vless"
-    vpn_host: str = ""
-    vpn_port: int | None = None
-    vpn_network: str = "tcp"
-    vpn_security: str = "reality"
-    vpn_ws_path: str = ""
+    vpn_host: str = "78.17.76.184"
+    vpn_port: int | None = 8443
+    vpn_network: str = "ws"
+    vpn_security: str = "none"
+    vpn_ws_path: str = "/"
     vpn_sni: str = ""
     vpn_server_name: str = ""
     vpn_public_key: str = ""

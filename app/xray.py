@@ -16,6 +16,24 @@ def _save_config(path: Path, config: dict[str, Any]) -> None:
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _matches_target_inbound(inbound: dict[str, Any]) -> bool:
+    settings = get_settings()
+    protocol = settings.vpn_protocol.strip().lower()
+    if protocol and str(inbound.get("protocol", "")).lower() != protocol:
+        return False
+    if settings.vpn_port and inbound.get("port") != settings.vpn_port:
+        return False
+
+    stream_settings = inbound.get("streamSettings", {})
+    network = settings.vpn_network_value()
+    security = settings.vpn_security_value()
+    if network and stream_settings and str(stream_settings.get("network", "")).lower() != network:
+        return False
+    if security and stream_settings and str(stream_settings.get("security", "")).lower() != security:
+        return False
+    return True
+
+
 def add_client(user: dict) -> dict[str, Any]:
     settings = get_settings()
     if not settings.xray_config_path:
@@ -34,7 +52,7 @@ def add_client(user: dict) -> dict[str, Any]:
     added = 0
     already_present = False
     for inbound in config.get("inbounds", []):
-        if inbound.get("protocol") not in (None, "vless"):
+        if not _matches_target_inbound(inbound):
             continue
         clients = inbound.get("settings", {}).get("clients")
         if not isinstance(clients, list):
@@ -46,7 +64,7 @@ def add_client(user: dict) -> dict[str, Any]:
         added += 1
 
     if not added and not already_present:
-        raise RuntimeError("No Xray inbound with settings.clients was found")
+        raise RuntimeError("No matching Xray inbound with settings.clients was found")
 
     if added:
         _save_config(path, config)

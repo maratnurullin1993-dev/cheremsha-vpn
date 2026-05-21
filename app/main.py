@@ -216,6 +216,26 @@ async def admin_panel_renew_7d(user_id: int, admin: dict = Depends(require_teleg
     return {"user": admin_user_detail(updated)}
 
 
+@app.post("/api/admin/panel/users/{user_id}/recreate-key")
+async def admin_panel_recreate_key(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        updated = vpn.recreate_user_key(user, days=7, traffic_limit_gb=10)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    db.log_event(
+        event_type="admin_panel_recreate_key",
+        user_id=updated["id"],
+        uuid_value=updated.get("uuid"),
+        message="Admin panel recreated VPN key after backend/config error",
+    )
+    return {"user": admin_user_detail(updated)}
+
+
 @app.post("/api/admin/panel/users/{user_id}/disable")
 async def admin_panel_disable(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
     user = db.get_user(user_id)
