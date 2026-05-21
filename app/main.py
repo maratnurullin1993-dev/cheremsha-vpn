@@ -1,0 +1,351 @@
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from app import db, payments, vpn
+from app.auth import current_user, require_admin_token
+from app.config import get_settings
+from app.qr import make_qr_png
+from app.scheduler import create_scheduler
+
+
+class DaysPayload(BaseModel):
+    days: int = Field(default=30, ge=1, le=365)
+
+
+class CreateKeyPayload(DaysPayload):
+    traffic_limit: int | None = Field(default=None, ge=1)
+
+
+class InvoicePayload(BaseModel):
+    plan_id: str
+
+
+class TrafficPayload(BaseModel):
+    gb: int = Field(default=10, ge=1, le=10_000)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init_db()
+    scheduler = create_scheduler()
+    scheduler.start()
+
+    bot_task = None
+    settings = get_settings()
+    if settings.bot_token:
+        from app.bot import run_bot
+
+        print(f"Telegram bot startup: polling enabled, WEBAPP_URL={settings.webapp_url}")
+        bot_task = asyncio.create_task(run_bot())
+        bot_task.add_done_callback(_log_bot_task_result)
+    else:
+        print("Telegram bot startup: BOT_TOKEN is empty, backend runs without bot.")
+
+    yield
+
+    scheduler.shutdown(wait=False)
+    if bot_task:
+        print("Telegram bot shutdown: stopping polling task.")
+        if not bot_task.done():
+            bot_task.cancel()
+        try:
+            await bot_task
+        except asyncio.CancelledError:
+            print("Telegram bot shutdown: polling task stopped.")
+        except Exception as error:
+            print(f"Telegram bot shutdown: polling task already stopped with error: {error!r}")
+
+
+def _log_bot_task_result(task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error:
+        print(f"Telegram bot startup: polling task stopped with error: {error!r}")
+    else:
+        print("Telegram bot startup: polling task finished.")
+
+
+settings = get_settings()
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if settings.dev_mode else [settings.webapp_url.rstrip("/")],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse("static/index.html")
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok"}
+
+
+@app.get("/api/me")
+async def me(user: dict = Depends(current_user)) -> dict:
+    node = vpn.node_status()
+    return {
+        "user": user,
+        "node": node,
+        "key": decorate_vpn_user(user) if user.get("uuid") else None,
+        "capacity": capacity_summary(),
+    }
+
+
+@app.post("/api/keys")
+async def create_key(payload: CreateKeyPayload, user: dict = Depends(current_user)) -> dict:
+    if not settings.dev_mode:
+        raise HTTPException(status_code=402, detail="Payment required")
+    if payload.traffic_limit:
+        user["traffic_limit"] = payload.traffic_limit
+    updated = vpn.activate_or_extend_user_key(user, days=payload.days, traffic_limit_gb=payload.traffic_limit)
+    return {"key": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
+
+
+@app.get("/api/keys/current")
+async def current_key(user: dict = Depends(current_user)) -> dict:
+    if db.user_vpn_status(user) != "active":
+        raise HTTPException(status_code=404, detail="Access is not active")
+    return {"key": decorate_vpn_user(user), "xray_client": vpn.xray_client_payload(user)}
+
+
+@app.get("/api/payments/plans")
+async def payment_plans(user: dict = Depends(current_user)) -> dict:
+    capacity = capacity_summary()
+    is_active_user = db.user_vpn_status(user) == "active"
+    return {
+        "plans": [] if capacity["is_full"] and not is_active_user else [payments.get_plan("7d"), payments.get_plan("30d")],
+        "capacity": capacity,
+        "support_url": settings.support_url,
+    }
+
+
+@app.post("/api/payments/invoice")
+async def payment_invoice(payload: InvoicePayload, user: dict = Depends(current_user)) -> dict:
+    plan = payments.get_plan(payload.plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if db.user_vpn_status(user) != "active" and capacity_summary()["available"] <= 0:
+        raise HTTPException(status_code=409, detail="No free slots")
+    try:
+        return await payments.create_stars_invoice(user, payload.plan_id)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=502, detail=f"Telegram API error: {exc.response.text}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/keys/{key_id}/renew")
+async def renew_key(key_id: int, payload: DaysPayload, user: dict = Depends(current_user)) -> dict:
+    if key_id != user["id"]:
+        raise HTTPException(status_code=404, detail="Key not found")
+    renewed = vpn.activate_or_extend_user_key(user, payload.days)
+    return {"key": decorate_vpn_user(renewed), "xray_client": vpn.xray_client_payload(renewed)}
+
+
+@app.post("/api/keys/{key_id}/disable")
+async def disable_key(key_id: int, user: dict = Depends(current_user)) -> dict:
+    if key_id != user["id"]:
+        raise HTTPException(status_code=404, detail="Key not found")
+    updated = vpn.disable_user_key(user)
+    return {"key": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
+
+
+@app.delete("/api/keys/{key_id}")
+async def delete_key(key_id: int, user: dict = Depends(current_user)) -> dict:
+    if key_id != user["id"]:
+        raise HTTPException(status_code=404, detail="Key not found")
+    updated = vpn.delete_user_key(user)
+    return {"key": decorate_vpn_user(updated)}
+
+
+@app.get("/api/keys/{key_id}/qr")
+async def key_qr(key_id: int, user: dict = Depends(current_user)) -> Response:
+    if key_id != user["id"] or not user.get("uuid"):
+        raise HTTPException(status_code=404, detail="Key not found")
+    if db.user_vpn_status(user) != "active":
+        raise HTTPException(status_code=403, detail="VPN inactive")
+    png = make_qr_png(vpn.build_vless_uri(user))
+    return Response(content=png, media_type="image/png")
+
+
+@app.get("/api/keys/{key_id}/subscription")
+async def key_subscription_url(key_id: int, user: dict = Depends(current_user)) -> dict:
+    if key_id != user["id"] or not user.get("subscription_token"):
+        raise HTTPException(status_code=404, detail="Key not found")
+    return {"subscription_url": vpn.subscription_url(user["subscription_token"])}
+
+
+@app.get("/api/devices")
+async def devices() -> dict:
+    return {
+        "devices": [
+            {
+                "id": "iphone",
+                "title": "iPhone",
+                "app": "",
+                "steps": "Отсканируй QR-код или вставь скопированную ссылку, затем включи подключение.",
+            },
+            {
+                "id": "android",
+                "title": "Android",
+                "app": "",
+                "steps": "Вставь скопированную ссылку в приложение для VPN и включи подключение.",
+            },
+            {
+                "id": "windows",
+                "title": "Windows",
+                "app": "",
+                "steps": "Добавь скопированную ссылку в приложение для VPN и нажми подключиться.",
+            },
+        ]
+    }
+
+
+@app.get("/sub/{token}")
+async def subscription(token: str) -> PlainTextResponse:
+    user = db.get_user_by_subscription_token(token)
+    if not user or db.user_vpn_status(user) != "active":
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    return PlainTextResponse(vpn.build_subscription(user))
+
+
+@app.get("/api/admin/users", dependencies=[Depends(require_admin_token)])
+async def admin_users(q: str | None = Query(default=None)) -> dict:
+    users = db.search_users(q)
+    return {"users": [decorate_vpn_user(user) for user in users], "capacity": capacity_summary()}
+
+
+@app.post("/api/admin/users/{user_id}/premium", dependencies=[Depends(require_admin_token)])
+async def admin_premium(user_id: int, payload: DaysPayload) -> dict:
+    user = db.grant_premium(user_id, payload.days)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user": user}
+
+
+@app.post("/api/admin/users/{user_id}/renew", dependencies=[Depends(require_admin_token)])
+async def admin_renew_user(user_id: int, payload: DaysPayload) -> dict:
+    existing = db.get_user(user_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = vpn.activate_or_extend_user_key(existing, payload.days)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.log_event(
+        event_type="admin_renew",
+        user_id=user["id"],
+        uuid_value=user.get("uuid"),
+        message=f"Admin renewed VPN access for {payload.days} days",
+    )
+    return {"user": decorate_vpn_user(user), "xray_client": vpn.xray_client_payload(user)}
+
+
+@app.post("/api/admin/users/{user_id}/traffic", dependencies=[Depends(require_admin_token)])
+async def admin_add_traffic(user_id: int, payload: TrafficPayload) -> dict:
+    user = db.add_user_traffic_limit(user_id, payload.gb)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.log_event(
+        event_type="admin_add_traffic",
+        user_id=user["id"],
+        uuid_value=user.get("uuid"),
+        message=f"Admin added {payload.gb} GB traffic",
+    )
+    return {"user": decorate_vpn_user(user), "capacity": capacity_summary()}
+
+
+@app.post("/api/admin/users/{user_id}/disable", dependencies=[Depends(require_admin_token)])
+async def admin_disable_user(user_id: int) -> dict:
+    existing = db.get_user(user_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = vpn.disable_user_key(existing)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user": decorate_vpn_user(user), "xray_client": vpn.xray_client_payload(user)}
+
+
+@app.delete("/api/admin/users/{user_id}/key", dependencies=[Depends(require_admin_token)])
+async def admin_delete_user_key(user_id: int) -> dict:
+    existing = db.get_user(user_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = vpn.delete_user_key(existing)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user": decorate_vpn_user(user)}
+
+
+@app.post("/api/admin/users/{user_id}/key", dependencies=[Depends(require_admin_token)])
+async def admin_create_user_key(user_id: int, payload: CreateKeyPayload) -> dict:
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if payload.traffic_limit:
+        user["traffic_limit"] = payload.traffic_limit
+    updated = vpn.activate_or_extend_user_key(user, days=payload.days, traffic_limit_gb=payload.traffic_limit)
+    return {"user": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
+
+
+def decorate_key(key: dict | None) -> dict | None:
+    if not key:
+        return None
+    decorated = dict(key)
+    decorated["vless_uri"] = vpn.build_vless_uri(key)
+    decorated["subscription_url"] = vpn.subscription_url(key["subscription_token"])
+    decorated["is_active"] = key["disabled_at"] is None
+    return decorated
+
+
+def decorate_vpn_user(user: dict | None) -> dict | None:
+    if not user:
+        return None
+    decorated = dict(user)
+    status = db.user_vpn_status(user)
+    decorated["status"] = status
+    decorated["is_active"] = status == "active"
+    decorated["label"] = vpn.label_for_user(user)
+    limit = user.get("traffic_limit")
+    used = user.get("used_traffic") or 0
+    decorated["traffic_limit_gb"] = limit
+    decorated["used_traffic_gb"] = used
+    decorated["remaining_traffic_gb"] = None if limit is None else max(limit - used, 0)
+    if user.get("uuid"):
+        decorated["vless_uri"] = vpn.build_vless_uri(decorated)
+    else:
+        decorated["vless_uri"] = None
+    if user.get("subscription_token"):
+        decorated["subscription_url"] = vpn.subscription_url(user["subscription_token"])
+    else:
+        decorated["subscription_url"] = None
+    return decorated
+
+
+def capacity_summary() -> dict:
+    active = db.active_keys_count()
+    max_keys = settings.max_active_keys
+    return {
+        "active": active,
+        "max": max_keys,
+        "available": max(max_keys - active, 0),
+        "is_full": active >= max_keys,
+    }

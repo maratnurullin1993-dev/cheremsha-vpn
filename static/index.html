@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>VPN Mini App</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <img class="mascot-watermark" src="/static/assets/cheremsha-mascot.png" alt="" />
+
+      <section class="topbar">
+        <div class="brand-lockup">
+          <img class="brand-emblem" src="/static/assets/cheremsha-mascot.png" alt="" />
+          <div>
+            <p class="eyebrow">underground access</p>
+            <h1>ЧЕРЕМША VPN</h1>
+          </div>
+        </div>
+      </section>
+
+      <section class="status-panel glass">
+        <div class="status-orbit">
+          <span></span>
+          <strong id="statusText">Loading</strong>
+        </div>
+        <p class="expiry-line" id="expiryLine">Доступ до: ...</p>
+        <p class="expiry-line" id="trafficLine">Осталось трафика: ...</p>
+        <p class="expiry-line" id="capacityLine">Мест занято: ...</p>
+      </section>
+
+      <section class="actions">
+        <button id="getKeyBtn">Получить доступ</button>
+        <div class="access-actions" id="accessActions">
+          <button id="copyKeyBtn" class="secondary">Скопировать VPN</button>
+          <button id="copySubBtn" class="secondary">Автоссылка</button>
+          <button id="helpBtn" class="secondary quiet">Как подключить?</button>
+        </div>
+      </section>
+
+      <section class="key-panel glass">
+        <div class="section-title">
+          <h2>QR-код</h2>
+        </div>
+        <div class="qr-wrap">
+          <img id="qrImage" alt="QR code" />
+        </div>
+      </section>
+
+      <div class="modal hidden" id="helpModal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal></div>
+        <section class="modal-sheet glass" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+          <div class="modal-head">
+            <h2 id="helpTitle">Как подключить?</h2>
+            <button class="icon-button" data-close-modal aria-label="Закрыть">×</button>
+          </div>
+          <div class="device-tabs" id="deviceTabs"></div>
+          <div class="device-help" id="deviceHelp"></div>
+        </section>
+      </div>
+
+      <div class="modal hidden" id="plansModal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-plans></div>
+        <section class="modal-sheet glass" role="dialog" aria-modal="true" aria-labelledby="plansTitle">
+          <div class="modal-head">
+            <h2 id="plansTitle">Выбери доступ</h2>
+            <button class="icon-button" data-close-plans aria-label="Закрыть">×</button>
+          </div>
+          <div class="plans-list" id="plansList"></div>
+        </section>
+      </div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
