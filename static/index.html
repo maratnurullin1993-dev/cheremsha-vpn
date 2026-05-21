@@ -3,11 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>VPN Mini App</title>
+    <title>ClubRU — service online</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <main class="app-shell">
+    <div class="browser-placeholder" id="browserPlaceholder">ClubRU — service online</div>
+
+    <main class="app-shell hidden" id="appShell">
       <img class="mascot-watermark" src="/static/assets/cheremsha-mascot.png" alt="" />
 
       <section class="topbar">
@@ -37,6 +39,13 @@
           <button id="copySubBtn" class="secondary">Автоссылка</button>
           <button id="helpBtn" class="secondary quiet">Как подключить?</button>
         </div>
+      </section>
+
+      <section class="admin-panel glass hidden" id="adminPanel">
+        <div class="section-title">
+          <h2>Админ</h2>
+        </div>
+        <button id="grantTestAccessBtn" class="secondary">Выдать тестовый доступ</button>
       </section>
 
       <section class="key-panel glass">

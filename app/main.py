@@ -120,6 +120,23 @@ async def create_key(payload: CreateKeyPayload, user: dict = Depends(current_use
     return {"key": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
 
 
+@app.post("/api/admin/grant-test-access")
+async def admin_grant_test_access(user: dict = Depends(current_user)) -> dict:
+    if not settings.admin_id or user["telegram_id"] != settings.admin_id:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    if db.user_vpn_status(user) == "active":
+        updated = user
+    else:
+        updated = vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+    db.log_event(
+        event_type="admin_test_access",
+        user_id=updated["id"],
+        uuid_value=updated.get("uuid"),
+        message="Admin test access granted or reused",
+    )
+    return {"key": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
+
+
 @app.get("/api/keys/current")
 async def current_key(user: dict = Depends(current_user)) -> dict:
     if db.user_vpn_status(user) != "active":

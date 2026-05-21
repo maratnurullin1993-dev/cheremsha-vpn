@@ -3,6 +3,7 @@ tg?.ready();
 tg?.expand();
 
 const state = {
+  user: null,
   key: null,
   devices: [],
   plans: [],
@@ -13,6 +14,14 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+if (!state.initData) {
+  $("appShell")?.remove();
+  throw new Error("Telegram WebApp initData is required");
+}
+
+$("browserPlaceholder")?.remove();
+$("appShell").classList.remove("hidden");
 
 function headers(extra = {}) {
   return state.initData ? { "X-Telegram-Init-Data": state.initData, ...extra } : extra;
@@ -90,6 +99,10 @@ function renderAccess() {
   }
 }
 
+function renderAdmin() {
+  setVisible("adminPanel", Boolean(state.user?.is_admin));
+}
+
 function renderPlans() {
   if (state.capacity?.is_full) {
     $("plansList").innerHTML = `
@@ -158,9 +171,11 @@ async function copyText(value, okMessage) {
 
 async function loadMe() {
   const data = await api("/api/me");
+  state.user = data.user;
   state.key = data.key;
   state.capacity = data.capacity;
   renderAccess();
+  renderAdmin();
 }
 
 async function loadDevices() {
@@ -223,6 +238,19 @@ async function buyPlan(planId) {
   }
 }
 
+async function grantTestAccess() {
+  const button = $("grantTestAccessBtn");
+  button.disabled = true;
+  try {
+    const data = await api("/api/admin/grant-test-access", { method: "POST" });
+    state.key = data.key;
+    renderAccess();
+    toast(hasAccess() ? "Тестовый доступ активен" : "Доступ не создан");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function openHelp() {
   renderHelp();
   $("helpModal").classList.remove("hidden");
@@ -239,6 +267,7 @@ document.addEventListener("click", async (event) => {
   if (!(target instanceof HTMLElement)) return;
 
   if (target.id === "getKeyBtn") await getKey();
+  if (target.id === "grantTestAccessBtn") await grantTestAccess();
   if (target.id === "copyKeyBtn") await copyText(state.key?.vless_uri, "VPN скопирован");
   if (target.id === "copySubBtn") await copyText(state.key?.subscription_url, "Автоссылка скопирована");
   if (target.id === "helpBtn") openHelp();

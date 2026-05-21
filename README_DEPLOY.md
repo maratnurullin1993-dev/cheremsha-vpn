@@ -112,6 +112,33 @@ When access is expired or disabled, a new paid activation can create a new UUID.
 
 For local development, leave `XRAY_CONFIG_PATH=` empty. In that mode the key is created only in SQLite and Xray is not changed.
 
+## Test Admin Access Without Stars
+
+Set your Telegram user id in `.env`:
+
+```env
+ADMIN_ID=123456789
+```
+
+Open the Mini App from that Telegram account. The app will show an `Админ` block with the `Выдать тестовый доступ` button.
+
+The button calls:
+
+```http
+POST /api/admin/grant-test-access
+```
+
+The endpoint validates Telegram Mini App `initData`, compares the authenticated `telegram_user_id` with `ADMIN_ID`, and grants test VPN access without Telegram Stars.
+
+Test access parameters:
+
+```text
+7 days
+10 GB
+```
+
+If the admin already has an active VPN key, the endpoint does not create a second UUID. It returns the existing key, QR, expiry date, traffic balance, and connection instructions through the normal Mini App UI.
+
 ## Update Through `git pull`
 
 ```bash

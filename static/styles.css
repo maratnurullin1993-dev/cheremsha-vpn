@@ -74,6 +74,15 @@ button.mini {
   display: none !important;
 }
 
+.browser-placeholder {
+  color: var(--text);
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
 button:disabled {
   cursor: progress;
   filter: saturate(0.5);
@@ -215,6 +224,13 @@ h2 {
 .key-panel {
   padding: 16px;
   margin-top: 14px;
+}
+
+.admin-panel {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 22px;
+  padding: 16px;
 }
 
 .section-title {
