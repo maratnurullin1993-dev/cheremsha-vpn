@@ -613,6 +613,21 @@ def list_keys() -> list[dict[str, Any]]:
         return [dict(row) for row in rows]
 
 
+def latest_key() -> dict[str, Any] | None:
+    with connect() as conn:
+        return row_to_dict(
+            conn.execute(
+                """
+                SELECT vpn_keys.*, users.telegram_id, users.username, users.first_name
+                FROM vpn_keys
+                JOIN users ON users.id = vpn_keys.user_id
+                ORDER BY vpn_keys.created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        )
+
+
 def disable_key(key_id: int) -> dict[str, Any] | None:
     with connect() as conn:
         conn.execute(

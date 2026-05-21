@@ -46,6 +46,7 @@ Then edit `.env` and set real values:
 
 ```env
 BOT_TOKEN=your_bot_token
+BOT_USERNAME=cheremsha_connect_bot
 TELEGRAM_BOT_URL=https://t.me/your_bot_username
 TELEGRAM_PROXY_URL=
 ADMIN_ID=your_telegram_user_id
@@ -57,7 +58,7 @@ VPN_HOST=vpn.example.com
 VPN_PORT=443
 VPN_PUBLIC_KEY=your_reality_public_key
 VPN_SHORT_ID=your_reality_short_id
-VPN_SERVER_NAME=www.microsoft.com
+VPN_SNI=www.microsoft.com
 XRAY_CONFIG_PATH=/usr/local/etc/xray/config.json
 XRAY_RESTART_COMMAND=systemctl restart xray
 ```

@@ -158,6 +158,12 @@ button.mini {
   text-decoration: none;
 }
 
+.landing-link-note {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 14px 0 0;
+}
+
 .landing-mascot {
   animation: mascotFloat 6s ease-in-out infinite;
   bottom: 6vh;
@@ -360,11 +366,13 @@ h2 {
 }
 
 .admin-users,
+.admin-debug,
 .admin-user-card {
   display: grid;
   gap: 10px;
 }
 
+.admin-debug,
 .admin-user-row,
 .admin-user-card {
   background: rgba(255, 255, 255, 0.055);

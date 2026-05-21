@@ -101,7 +101,7 @@ async def health() -> dict:
 
 @app.get("/api/public-config")
 async def public_config() -> dict:
-    return {"telegram_bot_url": settings.telegram_bot_url}
+    return {"telegram_open_url": settings.telegram_open_url()}
 
 
 @app.get("/api/me")
@@ -121,7 +121,12 @@ async def create_key(payload: CreateKeyPayload, user: dict = Depends(current_use
         raise HTTPException(status_code=402, detail="Payment required")
     if payload.traffic_limit:
         user["traffic_limit"] = payload.traffic_limit
-    updated = vpn.activate_or_extend_user_key(user, days=payload.days, traffic_limit_gb=payload.traffic_limit)
+    try:
+        updated = vpn.activate_or_extend_user_key(user, days=payload.days, traffic_limit_gb=payload.traffic_limit)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"key": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
 
 
@@ -130,7 +135,12 @@ async def admin_grant_test_access(user: dict = Depends(require_telegram_admin_us
     if db.user_vpn_status(user) == "active":
         updated = user
     else:
-        updated = vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+        try:
+            updated = vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+        except vpn.VpnProvisioningError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     db.log_event(
         event_type="admin_test_access",
         user_id=updated["id"],
@@ -149,6 +159,15 @@ async def admin_panel_users(admin: dict = Depends(require_telegram_admin_user)) 
     }
 
 
+@app.get("/api/admin/panel/debug")
+async def admin_panel_debug(admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    return {
+        "env": vpn.config_status(),
+        "latest_key": vpn.latest_key_debug(),
+        "last_provisioning_error": vpn.last_provisioning_error(),
+    }
+
+
 @app.get("/api/admin/panel/users/{user_id}")
 async def admin_panel_user(user_id: int, admin: dict = Depends(require_telegram_admin_user)) -> dict:
     user = db.get_user(user_id)
@@ -162,7 +181,12 @@ async def admin_panel_grant_test_access(user_id: int, admin: dict = Depends(requ
     user = db.get_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    updated = user if db.user_vpn_status(user) == "active" else vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+    try:
+        updated = user if db.user_vpn_status(user) == "active" else vpn.activate_or_extend_user_key(user, days=7, traffic_limit_gb=10)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     db.log_event(
         event_type="admin_panel_test_access",
         user_id=updated["id"],
@@ -177,7 +201,12 @@ async def admin_panel_renew_7d(user_id: int, admin: dict = Depends(require_teleg
     user = db.get_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    updated = vpn.activate_or_extend_user_key(user, days=7)
+    try:
+        updated = vpn.activate_or_extend_user_key(user, days=7)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     db.log_event(
         event_type="admin_panel_renew_7d",
         user_id=updated["id"],
@@ -254,7 +283,12 @@ async def payment_invoice(payload: InvoicePayload, user: dict = Depends(current_
 async def renew_key(key_id: int, payload: DaysPayload, user: dict = Depends(current_user)) -> dict:
     if key_id != user["id"]:
         raise HTTPException(status_code=404, detail="Key not found")
-    renewed = vpn.activate_or_extend_user_key(user, payload.days)
+    try:
+        renewed = vpn.activate_or_extend_user_key(user, payload.days)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"key": decorate_vpn_user(renewed), "xray_client": vpn.xray_client_payload(renewed)}
 
 
@@ -344,7 +378,12 @@ async def admin_renew_user(user_id: int, payload: DaysPayload) -> dict:
     existing = db.get_user(user_id)
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
-    user = vpn.activate_or_extend_user_key(existing, payload.days)
+    try:
+        user = vpn.activate_or_extend_user_key(existing, payload.days)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     db.log_event(
@@ -399,7 +438,12 @@ async def admin_create_user_key(user_id: int, payload: CreateKeyPayload) -> dict
         raise HTTPException(status_code=404, detail="User not found")
     if payload.traffic_limit:
         user["traffic_limit"] = payload.traffic_limit
-    updated = vpn.activate_or_extend_user_key(user, days=payload.days, traffic_limit_gb=payload.traffic_limit)
+    try:
+        updated = vpn.activate_or_extend_user_key(user, days=payload.days, traffic_limit_gb=payload.traffic_limit)
+    except vpn.VpnProvisioningError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"user": decorate_vpn_user(updated), "xray_client": vpn.xray_client_payload(updated)}
 
 
@@ -427,7 +471,13 @@ def decorate_vpn_user(user: dict | None) -> dict | None:
     decorated["used_traffic_gb"] = used
     decorated["remaining_traffic_gb"] = None if limit is None else max(limit - used, 0)
     if user.get("uuid"):
-        decorated["vless_uri"] = vpn.build_vless_uri(decorated)
+        try:
+            decorated["vless_uri"] = vpn.build_vless_uri(decorated)
+        except (vpn.VpnProvisioningError, RuntimeError) as error:
+            decorated["status"] = "config_error"
+            decorated["is_active"] = False
+            decorated["vless_uri"] = None
+            decorated["config_error"] = str(error)
     else:
         decorated["vless_uri"] = None
     if user.get("subscription_token"):

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     webapp_url: str = "http://localhost:8000"
 
     bot_token: str = ""
+    bot_username: str = ""
     telegram_bot_url: str = "https://t.me/"
     telegram_proxy_url: str = ""
     admin_id: int = 0
@@ -28,7 +29,8 @@ class Settings(BaseSettings):
     vpn_node_name: str = "Personal Node"
     vpn_country: str = "NL"
     vpn_host: str = ""
-    vpn_port: int = 443
+    vpn_port: int | None = None
+    vpn_sni: str = ""
     vpn_server_name: str = ""
     vpn_public_key: str = ""
     vpn_short_id: str = ""
@@ -48,8 +50,18 @@ class Settings(BaseSettings):
     @classmethod
     def default_vpn_port(cls, value: object) -> object:
         if value == "":
-            return 443
+            return None
         return value
+
+    def reality_sni(self) -> str:
+        return self.vpn_sni.strip() or self.vpn_server_name.strip()
+
+    def subscription_base_url(self) -> str:
+        public_url = self.public_base_url.strip().rstrip("/")
+        webapp_url = self.webapp_url.strip().rstrip("/")
+        if public_url and "localhost" not in public_url and "127.0.0.1" not in public_url:
+            return public_url
+        return webapp_url or public_url
 
     def admin_id_values(self) -> set[int]:
         values = {self.admin_id} if self.admin_id else set()
@@ -65,6 +77,12 @@ class Settings(BaseSettings):
     def default_admin_id(self) -> int:
         values = sorted(self.admin_id_values())
         return values[0] if values else 0
+
+    def telegram_open_url(self) -> str:
+        username = self.bot_username.strip().lstrip("@")
+        if not username:
+            return ""
+        return f"https://t.me/{username}?startapp=main"
 
 
 @lru_cache

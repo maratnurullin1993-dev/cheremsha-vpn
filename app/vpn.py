@@ -9,22 +9,68 @@ from app.config import get_settings
 from app import db, xray
 
 
+class VpnProvisioningError(RuntimeError):
+    pass
+
+
+_last_provisioning_error: str | None = None
+
+
+def set_last_provisioning_error(error: Exception | str | None) -> None:
+    global _last_provisioning_error
+    _last_provisioning_error = None if error is None else str(error)
+
+
+def last_provisioning_error() -> str | None:
+    return _last_provisioning_error
+
+
+def config_status() -> dict:
+    settings = get_settings()
+    values = {
+        "VPN_HOST": settings.vpn_host.strip(),
+        "VPN_PORT": settings.vpn_port,
+        "VPN_PUBLIC_KEY": settings.vpn_public_key.strip(),
+        "VPN_SHORT_ID": settings.vpn_short_id.strip(),
+        "VPN_SNI": settings.reality_sni(),
+        "VPN_FLOW": settings.vpn_flow.strip(),
+        "XRAY_CONFIG_PATH": settings.xray_config_path.strip(),
+        "XRAY_RESTART_COMMAND": settings.xray_restart_command.strip(),
+        "PUBLIC_BASE_URL_OR_WEBAPP_URL": settings.subscription_base_url(),
+    }
+    missing = [key for key, value in values.items() if value in ("", None)]
+    return {
+        "ok": not missing,
+        "missing": missing,
+        "values": {key: bool(value) for key, value in values.items()},
+    }
+
+
+def validate_vpn_config() -> None:
+    status = config_status()
+    if not status["ok"]:
+        missing = ", ".join(status["missing"])
+        raise VpnProvisioningError(f"VPN configuration is incomplete: {missing}")
+
+
 def build_vless_uri(key: dict) -> str:
+    validate_vpn_config()
+    settings = get_settings()
     label = quote(key.get("label") or label_for_user(key))
     params = {
         "type": "tcp",
         "security": "reality",
-        "pbk": key.get("public_key") or get_settings().vpn_public_key,
+        "pbk": key.get("public_key") or settings.vpn_public_key,
         "fp": "chrome",
-        "sni": key.get("sni") or get_settings().vpn_server_name,
-        "sid": key.get("short_id") or get_settings().vpn_short_id,
+        "sni": key.get("sni") or settings.reality_sni(),
+        "sid": key.get("short_id") or settings.vpn_short_id,
         "spx": "/",
-        "flow": key.get("flow") or get_settings().vpn_flow,
+        "flow": key.get("flow") or settings.vpn_flow,
         "encryption": "none",
     }
     query = urlencode(params)
-    host = key.get("server_host") or get_settings().vpn_host
-    port = key.get("server_port") or get_settings().vpn_port
+    host = key.get("server_host") or settings.vpn_host
+    port = key.get("server_port") or settings.vpn_port
     return f"vless://{key['uuid']}@{host}:{port}?{query}#{label}"
 
 
@@ -34,7 +80,7 @@ def build_subscription(key: dict) -> str:
 
 
 def subscription_url(token: str) -> str:
-    base = get_settings().public_base_url.rstrip("/")
+    base = get_settings().subscription_base_url()
     return f"{base}/sub/{token}"
 
 
@@ -46,6 +92,7 @@ def label_for_user(user: dict) -> str:
 
 def create_vless_key(user: dict, days: int | None = None) -> dict:
     settings = get_settings()
+    validate_vpn_config()
     key_uuid = str(uuid.uuid4())
     token = secrets.token_urlsafe(32)
     label_name = user.get("username") or user.get("first_name") or f"user-{user['telegram_id']}"
@@ -57,7 +104,7 @@ def create_vless_key(user: dict, days: int | None = None) -> dict:
         subscription_token=token,
         server_host=settings.vpn_host,
         server_port=settings.vpn_port,
-        sni=settings.vpn_server_name,
+        sni=settings.reality_sni(),
         public_key=settings.vpn_public_key,
         short_id=settings.vpn_short_id,
         flow=settings.vpn_flow,
@@ -74,7 +121,9 @@ def ensure_active_key(user: dict) -> dict:
 
 def create_or_replace_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
     settings = get_settings()
+    validate_vpn_config()
     if db.user_vpn_status(user) == "active" and user.get("uuid"):
+        ensure_configured_key(user)
         return db.extend_user_access(user["id"], days or settings.default_days, traffic_limit_gb)
 
     if user.get("uuid"):
@@ -85,34 +134,71 @@ def create_or_replace_user_key(user: dict, days: int | None = None, traffic_limi
     token = secrets.token_urlsafe(32)
     active_days = days or settings.default_days
     limit_gb = traffic_limit_gb if traffic_limit_gb is not None else user.get("traffic_limit")
-    updated = db.set_user_key(
-        user_id=user["id"],
-        uuid_value=key_uuid,
-        subscription_token=token,
-        days=active_days,
-        traffic_limit=limit_gb,
-    )
-    db.create_key(
-        user_id=user["id"],
-        uuid_value=key_uuid,
-        label=label_for_user(user),
-        subscription_token=token,
-        server_host=settings.vpn_host,
-        server_port=settings.vpn_port,
-        sni=settings.vpn_server_name,
-        public_key=settings.vpn_public_key,
-        short_id=settings.vpn_short_id,
-        flow=settings.vpn_flow,
-        days=active_days,
-        traffic_limit_gb=limit_gb,
-    )
-    xray.add_client(updated)
+    label = label_for_user(user)
+    pending_user = {
+        **user,
+        "uuid": key_uuid,
+        "subscription_token": token,
+        "traffic_limit": limit_gb,
+    }
+    try:
+        xray.add_client(pending_user)
+        updated = db.set_user_key(
+            user_id=user["id"],
+            uuid_value=key_uuid,
+            subscription_token=token,
+            days=active_days,
+            traffic_limit=limit_gb,
+        )
+        db.create_key(
+            user_id=user["id"],
+            uuid_value=key_uuid,
+            label=label,
+            subscription_token=token,
+            server_host=settings.vpn_host,
+            server_port=settings.vpn_port,
+            sni=settings.reality_sni(),
+            public_key=settings.vpn_public_key,
+            short_id=settings.vpn_short_id,
+            flow=settings.vpn_flow,
+            days=active_days,
+            traffic_limit_gb=limit_gb,
+        )
+    except Exception as error:
+        xray.remove_client(key_uuid)
+        set_last_provisioning_error(error)
+        raise
+    ensure_configured_key(updated)
+    set_last_provisioning_error(None)
     return updated
+
+
+def ensure_configured_key(user: dict) -> None:
+    if not user.get("uuid"):
+        raise VpnProvisioningError("VPN key UUID is missing")
+    uri = build_vless_uri(user)
+    if f"@:{get_settings().vpn_port}" in uri or "pbk=&" in uri or "sni=&" in uri or "sid=&" in uri:
+        raise VpnProvisioningError("Generated VLESS URI is invalid")
+    if not xray.has_client(user["uuid"]):
+        raise VpnProvisioningError("VPN backend client is missing in Xray config")
+
+
+def latest_key_debug() -> dict | None:
+    key = db.latest_key()
+    if not key:
+        return None
+    decorated = dict(key)
+    try:
+        decorated["vless_uri"] = build_vless_uri(key)
+    except Exception as error:
+        decorated["vless_error"] = str(error)
+    return decorated
 
 
 def activate_or_extend_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
     active_days = days or get_settings().default_days
     if db.user_vpn_status(user) == "active" and user.get("uuid"):
+        ensure_configured_key(user)
         return db.extend_user_access(user["id"], active_days, traffic_limit_gb)
     return create_or_replace_user_key(user, active_days, traffic_limit_gb)
 

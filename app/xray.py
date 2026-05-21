@@ -19,7 +19,9 @@ def _save_config(path: Path, config: dict[str, Any]) -> None:
 def add_client(user: dict) -> dict[str, Any]:
     settings = get_settings()
     if not settings.xray_config_path:
-        return {"status": "skipped", "reason": "XRAY_CONFIG_PATH is empty"}
+        raise RuntimeError("XRAY_CONFIG_PATH is required to create a real Xray client")
+    if not settings.xray_restart_command.strip():
+        raise RuntimeError("XRAY_RESTART_COMMAND is required to activate a real Xray client")
 
     path = Path(settings.xray_config_path)
     if not path.exists():
@@ -51,10 +53,31 @@ def add_client(user: dict) -> dict[str, Any]:
     if added:
         _save_config(path, config)
         restart_result = restart_xray()
+        if restart_result["status"] != "ok":
+            raise RuntimeError(f"Xray restart failed: {restart_result}")
     else:
         restart_result = {"status": "skipped", "reason": "client already exists"}
 
     return {"status": "ok", "added": added, "restart": restart_result}
+
+
+def has_client(uuid_value: str) -> bool:
+    settings = get_settings()
+    if not settings.xray_config_path:
+        return False
+
+    path = Path(settings.xray_config_path)
+    if not path.exists():
+        return False
+
+    config = _load_config(path)
+    for inbound in config.get("inbounds", []):
+        clients = inbound.get("settings", {}).get("clients")
+        if not isinstance(clients, list):
+            continue
+        if any(client.get("id") == uuid_value for client in clients):
+            return True
+    return False
 
 
 def remove_client(uuid_value: str) -> dict[str, Any]:

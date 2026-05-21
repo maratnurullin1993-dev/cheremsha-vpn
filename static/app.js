@@ -7,6 +7,7 @@ const state = {
   key: null,
   adminUsers: [],
   selectedAdminUser: null,
+  adminDebug: null,
   devices: [],
   plans: [],
   capacity: null,
@@ -23,11 +24,17 @@ if (!state.initData) {
   fetch("/api/public-config")
     .then((response) => (response.ok ? response.json() : null))
     .then((config) => {
-      if (config?.telegram_bot_url) {
-        $("telegramOpenLink").href = config.telegram_bot_url;
+      if (config?.telegram_open_url) {
+        $("telegramOpenLink").href = config.telegram_open_url;
+      } else {
+        $("telegramOpenLink").classList.add("hidden");
+        $("telegramLinkNote").classList.remove("hidden");
       }
     })
-    .catch(() => {});
+    .catch(() => {
+      $("telegramOpenLink").classList.add("hidden");
+      $("telegramLinkNote").classList.remove("hidden");
+    });
 } else {
   $("landingPage")?.remove();
   $("browserPlaceholder")?.remove();
@@ -145,6 +152,23 @@ function renderAdminUsers() {
       `,
     )
     .join("");
+}
+
+function renderAdminDebug() {
+  const debug = state.adminDebug;
+  if (!debug) {
+    $("adminDebug").innerHTML = "";
+    return;
+  }
+  const missing = debug.env?.missing?.length ? debug.env.missing.join(", ") : "none";
+  const lastKey = debug.latest_key?.uuid || "none";
+  $("adminDebug").innerHTML = `
+    <strong>VPN backend</strong>
+    <span class="admin-meta">Env complete: ${debug.env?.ok ? "yes" : "no"}</span>
+    <span class="admin-meta">Missing: ${missing}</span>
+    <span class="admin-meta">Last key/device: ${lastKey}</span>
+    <span class="admin-meta">Last error: ${debug.last_provisioning_error || "none"}</span>
+  `;
 }
 
 function renderAdminUserCard() {
@@ -332,10 +356,17 @@ async function loadAdminUsers() {
   renderAdminUsers();
 }
 
+async function loadAdminDebug() {
+  const data = await api("/api/admin/panel/debug");
+  state.adminDebug = data;
+  renderAdminDebug();
+}
+
 async function openAdmin() {
   if (!state.user?.is_admin) return;
   $("adminModal").classList.remove("hidden");
   $("adminModal").setAttribute("aria-hidden", "false");
+  await loadAdminDebug();
   await loadAdminUsers();
 }
 

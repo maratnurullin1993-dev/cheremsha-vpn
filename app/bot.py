@@ -177,11 +177,25 @@ async def successful_payment(message: Message) -> None:
         telegram_payment_charge_id=payment_info.telegram_payment_charge_id,
         provider_payment_charge_id=payment_info.provider_payment_charge_id,
     )
-    updated = vpn.activate_or_extend_user_key(
-        user,
-        days=payment["days"],
-        traffic_limit_gb=payment["traffic_limit_gb"],
-    )
+    try:
+        updated = vpn.activate_or_extend_user_key(
+            user,
+            days=payment["days"],
+            traffic_limit_gb=payment["traffic_limit_gb"],
+        )
+    except Exception as error:
+        db.log_event(
+            event_type="payment_access_failed",
+            user_id=user["id"],
+            uuid_value=user.get("uuid"),
+            message=f"VPN access was not created after Stars payment: {error}",
+            metadata=payment_info.invoice_payload,
+        )
+        await message.answer(
+            "Оплата получена, но доступ не был создан из-за ошибки настройки сервера. Напиши в поддержку.",
+            reply_markup=main_keyboard(),
+        )
+        return
     db.log_event(
         event_type="payment_access_created",
         user_id=user["id"],
