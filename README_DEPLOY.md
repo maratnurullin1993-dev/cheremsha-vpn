@@ -61,7 +61,7 @@ VPN_NETWORK=ws
 VPN_SECURITY=none
 VPN_WS_PATH=/
 VPN_FLOW=
-XRAY_CONFIG_PATH=/usr/local/etc/xray/config.json
+XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
 XRAY_RESTART_COMMAND=
 MAX_USERS=20
 ```
