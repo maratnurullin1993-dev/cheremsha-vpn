@@ -391,7 +391,7 @@ async function adminAction(action) {
   if (!user) return;
   try {
     if (action === "copy-key") {
-      await copyRawText(user.vless_uri, "VPN ключ скопирован");
+      await copyRawText(user.vpn_config || user.vless_uri, "VPN ключ скопирован");
       return;
     }
     const endpoints = {
@@ -423,7 +423,7 @@ document.addEventListener("click", async (event) => {
 
   if (target.id === "getKeyBtn") await getKey();
   if (target.id === "openAdminBtn") await openAdmin();
-  if (target.id === "copyKeyBtn") await copyText(state.key?.vless_uri, "VPN скопирован");
+  if (target.id === "copyKeyBtn") await copyText(state.key?.vpn_config || state.key?.vless_uri, "VPN скопирован");
   if (target.id === "copySubBtn") await copyText(state.key?.subscription_url, "Автоссылка скопирована");
   if (target.id === "helpBtn") openHelp();
   if (target.dataset.closeModal !== undefined) closeHelp();

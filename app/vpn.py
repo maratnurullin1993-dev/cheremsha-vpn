@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import secrets
 import uuid
 from urllib.parse import quote, urlencode
@@ -72,6 +73,129 @@ def is_valid_uuid(value: object) -> bool:
 
 def build_access_uri(key: dict) -> str:
     return build_vless_uri(key)
+
+
+def build_client_config(key: dict) -> str:
+    settings = get_settings()
+    label = key.get("label") or label_for_user(key)
+    host = settings.vpn_host or key.get("server_host")
+    port = settings.vpn_port or key.get("server_port")
+    path = settings.vpn_ws_path.strip() or xray.ws_path_from_config() or "/"
+    if not key.get("uuid") or not is_valid_uuid(key.get("uuid")) or not host or not port:
+        raise VpnProvisioningError("Generated Xray client config is invalid")
+
+    config = {
+        "log": {"loglevel": "warning"},
+        "remarks": label,
+        "inbounds": [
+            {
+                "tag": "socks",
+                "listen": "127.0.0.1",
+                "port": 10808,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+                "sniffing": {
+                    "enabled": True,
+                    "destOverride": ["http", "tls", "quic"],
+                    "routeOnly": False,
+                },
+            },
+            {
+                "tag": "directSocks",
+                "listen": "127.0.0.1",
+                "port": 10809,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+                "sniffing": {
+                    "enabled": True,
+                    "destOverride": ["http", "tls", "quic"],
+                    "routeOnly": False,
+                },
+            },
+            {
+                "tag": "api",
+                "listen": "127.0.0.1",
+                "port": 10085,
+                "protocol": "dokodemo-door",
+                "settings": {"address": "127.0.0.1"},
+            },
+        ],
+        "outbounds": [
+            {
+                "tag": "proxy",
+                "protocol": "vless",
+                "settings": {
+                    "vnext": [
+                        {
+                            "address": host,
+                            "port": int(port),
+                            "users": [
+                                {
+                                    "id": key["uuid"],
+                                    "encryption": "none",
+                                    "flow": "",
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "streamSettings": {
+                    "network": "ws",
+                    "security": "none",
+                    "wsSettings": {"path": path},
+                },
+            },
+            {
+                "tag": "fragment",
+                "protocol": "freedom",
+                "settings": {
+                    "domainStrategy": "UseIP",
+                    "fragment": {
+                        "packets": "tlshello",
+                        "length": "100-200",
+                        "interval": "10-20",
+                    },
+                },
+            },
+            {"tag": "direct", "protocol": "freedom", "settings": {"domainStrategy": "UseIP"}},
+            {"tag": "block", "protocol": "blackhole", "settings": {"response": {"type": "http"}}},
+            {"tag": "dns-out", "protocol": "dns"},
+        ],
+        "dns": {
+            "servers": [
+                "https://1.1.1.1/dns-query",
+                "https://8.8.8.8/dns-query",
+                "localhost",
+            ],
+            "queryStrategy": "UseIP",
+        },
+        "routing": {
+            "domainStrategy": "IPIfNonMatch",
+            "rules": [
+                {"type": "field", "inboundTag": ["api"], "outboundTag": "api"},
+                {"type": "field", "inboundTag": ["directSocks"], "outboundTag": "direct"},
+                {"type": "field", "port": 53, "network": "udp,tcp", "outboundTag": "dns-out"},
+                {"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"},
+                {"type": "field", "protocol": ["bittorrent"], "outboundTag": "block"},
+                {"type": "field", "inboundTag": ["socks"], "outboundTag": "proxy"},
+            ],
+        },
+        "api": {
+            "tag": "api",
+            "services": ["HandlerService", "LoggerService", "StatsService"],
+        },
+        "policy": {
+            "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
+            "system": {
+                "statsInboundUplink": True,
+                "statsInboundDownlink": True,
+                "statsOutboundUplink": True,
+                "statsOutboundDownlink": True,
+            },
+        },
+        "stats": {},
+    }
+    return json.dumps(config, ensure_ascii=False, indent=2)
 
 
 def build_vless_uri(key: dict) -> str:

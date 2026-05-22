@@ -466,6 +466,7 @@ def decorate_key(key: dict | None) -> dict | None:
         return None
     decorated = dict(key)
     decorated["vless_uri"] = vpn.build_access_uri(key)
+    decorated["vpn_config"] = vpn.build_client_config(key)
     decorated["subscription_url"] = vpn.subscription_url(key["subscription_token"])
     decorated["is_active"] = key["disabled_at"] is None
     return decorated
@@ -487,13 +488,16 @@ def decorate_vpn_user(user: dict | None) -> dict | None:
     if user.get("uuid"):
         try:
             decorated["vless_uri"] = vpn.build_access_uri(decorated)
+            decorated["vpn_config"] = vpn.build_client_config(decorated)
         except (vpn.VpnProvisioningError, RuntimeError) as error:
             decorated["status"] = "config_error"
             decorated["is_active"] = False
             decorated["vless_uri"] = None
+            decorated["vpn_config"] = None
             decorated["config_error"] = str(error)
     else:
         decorated["vless_uri"] = None
+        decorated["vpn_config"] = None
     if user.get("subscription_token"):
         decorated["subscription_url"] = vpn.subscription_url(user["subscription_token"])
     else:
@@ -525,6 +529,7 @@ def admin_user_detail(user: dict) -> dict:
         **admin_user_summary(user),
         "remaining_traffic_gb": decorated["remaining_traffic_gb"],
         "vless_uri": decorated["vless_uri"],
+        "vpn_config": decorated["vpn_config"],
         "subscription_url": decorated["subscription_url"],
     }
 
