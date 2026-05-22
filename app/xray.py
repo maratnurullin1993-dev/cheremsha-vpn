@@ -58,6 +58,7 @@ def add_client(user: dict) -> dict[str, Any]:
     client = {
         "id": user["uuid"],
         "email": f"telegram_{user['telegram_id']}",
+        "flow": "",
     }
     if settings.vpn_security_value() == "reality" and settings.vpn_flow.strip():
         client["flow"] = settings.vpn_flow.strip()

@@ -92,6 +92,7 @@ def _client_payload(user: dict) -> dict[str, Any]:
     client = {
         "id": user["uuid"],
         "email": f"telegram_{user['telegram_id']}",
+        "flow": "",
         "enable": True,
         "totalGB": 0,
         "expiryTime": 0,
