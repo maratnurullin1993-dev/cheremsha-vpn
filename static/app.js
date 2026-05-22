@@ -62,7 +62,14 @@ async function api(path, options = {}) {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || response.statusText);
+    let message = text;
+    try {
+      const data = JSON.parse(text);
+      message = data.detail || data.message || JSON.stringify(data);
+    } catch (error) {
+      message = text;
+    }
+    throw new Error(message || response.statusText);
   }
   return response.json();
 }
@@ -158,10 +165,17 @@ function renderAdminDebug() {
   const debug = state.adminDebug;
   if (!debug) {
     $("adminDebug").innerHTML = "";
+    setVisible("adminDebug", false);
     return;
   }
   const missing = debug.env?.missing?.length ? debug.env.missing.join(", ") : "none";
   const lastKey = debug.latest_key?.uuid || "none";
+  const hasDebugInfo = !debug.env?.ok || debug.env?.missing?.length || debug.latest_key || debug.last_provisioning_error;
+  if (!hasDebugInfo) {
+    $("adminDebug").innerHTML = "";
+    setVisible("adminDebug", false);
+    return;
+  }
   $("adminDebug").innerHTML = `
     <strong>VPN backend</strong>
     <span class="admin-meta">Env complete: ${debug.env?.ok ? "yes" : "no"}</span>
@@ -169,6 +183,7 @@ function renderAdminDebug() {
     <span class="admin-meta">Last key/device: ${lastKey}</span>
     <span class="admin-meta">Last error: ${debug.last_provisioning_error || "none"}</span>
   `;
+  setVisible("adminDebug", true);
 }
 
 function renderAdminUserCard() {
@@ -374,24 +389,32 @@ async function openAdminUser(userId) {
 async function adminAction(action) {
   const user = state.selectedAdminUser;
   if (!user) return;
-  if (action === "copy-key") {
-    await copyRawText(user.vless_uri, "VPN ключ скопирован");
-    return;
+  try {
+    if (action === "copy-key") {
+      await copyRawText(user.vless_uri, "VPN ключ скопирован");
+      return;
+    }
+    const endpoints = {
+      "grant-test": { path: `/api/admin/panel/users/${user.id}/grant-test-access`, method: "POST" },
+      "renew-7d": { path: `/api/admin/panel/users/${user.id}/renew-7d`, method: "POST" },
+      disable: { path: `/api/admin/panel/users/${user.id}/disable`, method: "POST" },
+      "delete-key": { path: `/api/admin/panel/users/${user.id}/key`, method: "DELETE" },
+    };
+    const endpoint = endpoints[action];
+    if (!endpoint) return;
+    const data = await api(endpoint.path, { method: endpoint.method });
+    state.selectedAdminUser = data.user;
+    renderAdminUserCard();
+    await loadMe();
+    await loadDevices();
+    await loadAdminUsers();
+    await openAdminUser(user.id);
+    await loadAdminDebug();
+    toast("Готово");
+  } catch (error) {
+    console.error(error);
+    toast(error.message || "Ошибка");
   }
-  const endpoints = {
-    "grant-test": { path: `/api/admin/panel/users/${user.id}/grant-test-access`, method: "POST" },
-    "renew-7d": { path: `/api/admin/panel/users/${user.id}/renew-7d`, method: "POST" },
-    disable: { path: `/api/admin/panel/users/${user.id}/disable`, method: "POST" },
-    "delete-key": { path: `/api/admin/panel/users/${user.id}/key`, method: "DELETE" },
-  };
-  const endpoint = endpoints[action];
-  if (!endpoint) return;
-  const data = await api(endpoint.path, { method: endpoint.method });
-  state.selectedAdminUser = data.user;
-  renderAdminUserCard();
-  await loadAdminUsers();
-  await loadMe();
-  toast("Готово");
 }
 
 document.addEventListener("click", async (event) => {

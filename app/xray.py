@@ -7,6 +7,8 @@ from typing import Any
 
 from app.config import get_settings
 
+SAFE_NOOP_COMMANDS = {"", "systemctl restart x-ui"}
+
 
 def _load_config(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -151,8 +153,8 @@ def remove_client(uuid_value: str) -> dict[str, Any]:
 
 def restart_xray() -> dict[str, Any]:
     command = get_settings().xray_restart_command.strip()
-    if not command:
-        return {"status": "skipped", "reason": "XRAY_RESTART_COMMAND is empty"}
+    if command in SAFE_NOOP_COMMANDS:
+        return {"status": "skipped", "reason": "XRAY_RESTART_COMMAND is empty or not docker-safe"}
 
     result = subprocess.run(
         command,

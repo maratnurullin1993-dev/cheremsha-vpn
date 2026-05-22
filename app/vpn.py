@@ -62,6 +62,14 @@ def validate_vpn_config() -> None:
         raise VpnProvisioningError(f"VPN configuration is incomplete: {missing}")
 
 
+def is_valid_uuid(value: object) -> bool:
+    try:
+        uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 def build_access_uri(key: dict) -> str:
     return build_vless_uri(key)
 
@@ -72,7 +80,7 @@ def build_vless_uri(key: dict) -> str:
     host = settings.vpn_host or key.get("server_host")
     port = settings.vpn_port or key.get("server_port")
     path = settings.vpn_ws_path.strip() or xray.ws_path_from_config() or "/"
-    if not key.get("uuid") or not host or not port:
+    if not key.get("uuid") or not is_valid_uuid(key.get("uuid")) or not host or not port:
         raise VpnProvisioningError("Generated VLESS URI is invalid")
     params = {
         "type": "ws",
@@ -184,7 +192,7 @@ def create_or_replace_user_key(user: dict, days: int | None = None, traffic_limi
 
 
 def ensure_configured_key(user: dict) -> None:
-    if not user.get("uuid"):
+    if not user.get("uuid") or not is_valid_uuid(user.get("uuid")):
         raise VpnProvisioningError("VPN key UUID is missing")
     uri = build_vless_uri(user)
     if f"@:{get_settings().vpn_port}" in uri:
@@ -212,7 +220,8 @@ def latest_key_debug() -> dict | None:
 def activate_or_extend_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
     active_days = days or get_settings().default_days
     if db.user_vpn_status(user) == "active" and user.get("uuid"):
-        ensure_configured_key(user)
+        if not is_valid_uuid(user.get("uuid")) or not xray.has_client(user["uuid"]):
+            return recreate_user_key(user, active_days, traffic_limit_gb)
         return db.extend_user_access(user["id"], active_days, traffic_limit_gb)
     return create_or_replace_user_key(user, active_days, traffic_limit_gb)
 

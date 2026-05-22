@@ -503,6 +503,7 @@ def decorate_vpn_user(user: dict | None) -> dict | None:
 
 def admin_user_summary(user: dict) -> dict:
     decorated = decorate_vpn_user(user)
+    active_key = db.get_active_key(user["id"]) if user.get("uuid") else None
     return {
         "id": user["id"],
         "telegram_user_id": user["telegram_id"],
@@ -512,8 +513,9 @@ def admin_user_summary(user: dict) -> dict:
         "expires_at": user.get("expires_at"),
         "traffic_limit_gb": decorated["traffic_limit_gb"],
         "used_traffic_gb": decorated["used_traffic_gb"],
-        "key_id": user["id"],
-        "device_id": user.get("uuid"),
+        "key_id": active_key["id"] if active_key else None,
+        "device_id": active_key["id"] if active_key else None,
+        "uuid": user.get("uuid"),
     }
 
 
