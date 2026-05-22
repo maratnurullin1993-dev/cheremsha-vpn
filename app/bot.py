@@ -168,6 +168,21 @@ async def successful_payment(message: Message) -> None:
         )
         return
     if payment["status"] == "paid" and db.user_vpn_status(user) == "active":
+        try:
+            vpn.build_client_config(user)
+        except Exception as error:
+            db.log_event(
+                event_type="payment_active_config_failed",
+                user_id=user["id"],
+                uuid_value=user.get("uuid"),
+                message=f"Active VPN config could not be built after Stars payment: {error}",
+                metadata=payment_info.invoice_payload,
+            )
+            await message.answer(
+                "РћРїР»Р°С‚Р° РїРѕР»СѓС‡РµРЅР°, РЅРѕ РєРѕРЅС„РёРі РЅРµ СЃРѕР±СЂР°Р»СЃСЏ РёР·-Р·Р° РѕС€РёР±РєРё РЅР°СЃС‚СЂРѕР№РєРё СЃРµСЂРІРµСЂР°. РќР°РїРёС€Рё РІ РїРѕРґРґРµСЂР¶РєСѓ.",
+                reply_markup=main_keyboard(),
+            )
+            return
         await message.answer("Р”РѕСЃС‚СѓРї СѓР¶Рµ Р°РєС‚РёРІРµРЅ. РћС‚РєСЂРѕР№ mini app.", reply_markup=main_keyboard())
         return
 
@@ -182,6 +197,7 @@ async def successful_payment(message: Message) -> None:
             days=payment["days"],
             traffic_limit_gb=payment["traffic_limit_gb"],
         )
+        vpn.build_client_config(updated)
     except Exception as error:
         db.log_event(
             event_type="payment_access_failed",
