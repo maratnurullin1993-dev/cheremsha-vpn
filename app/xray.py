@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from app import xui_db
 from app.config import get_settings
 
 SAFE_NOOP_COMMANDS = {"", "systemctl restart x-ui"}
@@ -38,6 +39,15 @@ def _matches_target_inbound(inbound: dict[str, Any]) -> bool:
 
 def add_client(user: dict) -> dict[str, Any]:
     settings = get_settings()
+    if xui_db.is_configured():
+        if not xui_db.exists():
+            raise RuntimeError(f"x-ui database not found: {settings.xui_db_path}")
+        result = xui_db.add_client(user)
+        restart_result = restart_xray()
+        if restart_result["status"] not in ("ok", "skipped"):
+            raise RuntimeError(f"x-ui restart failed: {restart_result}")
+        return {**result, "restart": restart_result}
+
     if not settings.xray_config_path:
         raise RuntimeError("XRAY_CONFIG_PATH is required to create a real Xray client")
     path = Path(settings.xray_config_path)
@@ -80,6 +90,9 @@ def add_client(user: dict) -> dict[str, Any]:
 
 
 def ws_path_from_config() -> str:
+    if xui_db.exists():
+        return xui_db.ws_path_from_db()
+
     settings = get_settings()
     if not settings.xray_config_path:
         return ""
@@ -101,6 +114,9 @@ def ws_path_from_config() -> str:
 
 
 def has_client(uuid_value: str) -> bool:
+    if xui_db.is_configured():
+        return xui_db.has_client(uuid_value)
+
     settings = get_settings()
     if not settings.xray_config_path:
         return False
@@ -122,6 +138,14 @@ def has_client(uuid_value: str) -> bool:
 
 
 def remove_client(uuid_value: str) -> dict[str, Any]:
+    if xui_db.is_configured():
+        result = xui_db.remove_client(uuid_value)
+        if result.get("removed"):
+            restart_result = restart_xray()
+        else:
+            restart_result = {"status": "skipped", "reason": result.get("reason", "client was not present")}
+        return {**result, "restart": restart_result}
+
     settings = get_settings()
     if not settings.xray_config_path:
         return {"status": "skipped", "reason": "XRAY_CONFIG_PATH is empty"}

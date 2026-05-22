@@ -7,7 +7,7 @@ import uuid
 from urllib.parse import quote, urlencode
 
 from app.config import get_settings
-from app import db, xray
+from app import db, xray, xui_db
 
 
 class VpnProvisioningError(RuntimeError):
@@ -34,7 +34,7 @@ def config_status() -> dict:
         "VPN_PORT": settings.vpn_port,
         "VPN_NETWORK": settings.vpn_network_value(),
         "VPN_SECURITY": settings.vpn_security_value(),
-        "XRAY_CONFIG_PATH": settings.xray_config_path.strip(),
+        "XUI_DB_PATH": settings.xui_db_path.strip(),
         "WEBAPP_URL": settings.webapp_url.strip(),
     }
     if settings.vpn_security_value() == "reality":
@@ -46,7 +46,12 @@ def config_status() -> dict:
             }
         )
     missing = [key for key, value in values.items() if value in ("", None)]
+    if settings.xui_db_path.strip() and not xui_db.exists():
+        missing.append("XUI_DB_PATH:file")
     value_status = {key: bool(value) for key, value in values.items()}
+    value_status["XRAY_CONFIG_PATH"] = bool(settings.xray_config_path.strip())
+    value_status["XUI_DB_EXISTS"] = xui_db.exists()
+    value_status["XUI_DB_SCHEMA"] = xui_db.schema_summary() if xui_db.exists() else None
     value_status["VPN_FLOW"] = bool(settings.vpn_flow.strip())
     value_status["VPN_WS_PATH"] = bool(settings.vpn_ws_path.strip() or xray.ws_path_from_config())
     return {

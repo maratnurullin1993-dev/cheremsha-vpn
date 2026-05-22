@@ -7,4 +7,5 @@ services:
     volumes:
       - ./data:/app/data
       - /usr/local/x-ui/bin/config.json:/usr/local/x-ui/bin/config.json
+      - /etc/x-ui/x-ui.db:/etc/x-ui/x-ui.db
     restart: unless-stopped

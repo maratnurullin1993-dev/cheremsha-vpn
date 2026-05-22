@@ -62,6 +62,7 @@ VPN_SECURITY=none
 VPN_WS_PATH=/
 VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
+XUI_DB_PATH=/etc/x-ui/x-ui.db
 XRAY_RESTART_COMMAND=
 MAX_USERS=20
 ```
@@ -114,7 +115,7 @@ Each Telegram user has at most one active VPN UUID. The active UUID is stored on
 
 When a user already has an active key, the app reuses that UUID and shows the existing key data. It must not create a new UUID on every login or every mini app open: doing that would leave old clients in Xray, break existing device profiles, and inflate the active key count.
 
-When access is expired or disabled, a new paid activation can create a new UUID. On creation the app adds the UUID to the existing x-ui/Xray inbound in `XRAY_CONFIG_PATH`, stores the key in SQLite, optionally runs `XRAY_RESTART_COMMAND`, and returns the personal VLESS link.
+When access is expired or disabled, a new paid activation can create a new UUID. On creation the app adds the UUID to the existing x-ui inbound in `XUI_DB_PATH`, stores the key in SQLite, optionally runs `XRAY_RESTART_COMMAND`, and returns the personal VLESS link. `XRAY_CONFIG_PATH` is kept only as a fallback/debug path.
 
 For the current x-ui VLESS over WebSocket inbound, use:
 
@@ -127,9 +128,10 @@ VPN_SECURITY=none
 VPN_WS_PATH=/
 VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
+XUI_DB_PATH=/etc/x-ui/x-ui.db
 ```
 
-The app does not create or modify inbounds. It only appends/removes clients in the existing inbound matching `protocol=vless` and `port=8443`.
+The app does not create or modify inbounds. It only appends/removes clients in the existing x-ui DB inbound matching `protocol=vless` and `port=8443`.
 
 Generated link format:
 
@@ -189,7 +191,7 @@ User card actions:
 - delete VPN key/device
 - show/copy VPN key
 
-The delete action disables the device/key through the existing VPN disable path and removes the UUID from the Xray `settings.clients` array.
+The delete action disables the device/key through the existing VPN disable path and removes the UUID from the x-ui inbound `settings.clients` array.
 
 ## Update Through `git pull`
 

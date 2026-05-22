@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     default_days: int = 30
 
     xray_config_path: str = ""
+    xui_db_path: str = ""
     xray_restart_command: str = ""
 
     max_users: int = 20
