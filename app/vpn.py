@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
+from hashlib import sha256
 from urllib.parse import quote, urlencode
 
 from app.config import get_settings
@@ -93,6 +94,7 @@ def build_client_config(key: dict) -> str:
     if not key.get("uuid") or not is_valid_uuid(key.get("uuid")) or not host or not port:
         raise VpnProvisioningError("Generated Xray client config is invalid")
 
+    socks_port, api_port = local_ports_for_uuid(key["uuid"])
     config = {
         "log": {"loglevel": "warning"},
         "remarks": label,
@@ -100,7 +102,7 @@ def build_client_config(key: dict) -> str:
             {
                 "tag": "socks",
                 "listen": "127.0.0.1",
-                "port": 10808,
+                "port": socks_port,
                 "protocol": "socks",
                 "settings": {"auth": "noauth", "udp": True},
                 "sniffing": {
@@ -112,7 +114,7 @@ def build_client_config(key: dict) -> str:
             {
                 "tag": "directSocks",
                 "listen": "127.0.0.1",
-                "port": 10809,
+                "port": 1087,
                 "protocol": "socks",
                 "settings": {"auth": "noauth", "udp": True},
                 "sniffing": {
@@ -123,10 +125,10 @@ def build_client_config(key: dict) -> str:
             },
             {
                 "tag": "api",
-                "listen": "127.0.0.1",
-                "port": 10085,
+                "listen": "::1",
+                "port": api_port,
                 "protocol": "dokodemo-door",
-                "settings": {"address": "127.0.0.1"},
+                "settings": {"address": "::1"},
             },
         ],
         "outbounds": [
@@ -140,6 +142,8 @@ def build_client_config(key: dict) -> str:
                             "port": int(port),
                             "users": [
                                 {
+                                    "email": "",
+                                    "level": 8,
                                     "id": key["uuid"],
                                     "encryption": "none",
                                     "flow": "",
@@ -153,7 +157,12 @@ def build_client_config(key: dict) -> str:
                     "security": "none",
                     "wsSettings": {"path": path},
                 },
-                "mux": {"enabled": False},
+                "mux": {
+                    "enabled": False,
+                    "concurrency": 50,
+                    "xudpConcurrency": 128,
+                    "xudpProxyUDP443": "allow",
+                },
             },
             {
                 "tag": "fragment",
@@ -162,8 +171,8 @@ def build_client_config(key: dict) -> str:
                     "domainStrategy": "UseIP",
                     "fragment": {
                         "packets": "tlshello",
-                        "length": "100-200",
-                        "interval": "10-20",
+                        "length": "80-250",
+                        "interval": "10-100",
                     },
                 },
             },
@@ -173,14 +182,14 @@ def build_client_config(key: dict) -> str:
         ],
         "dns": {
             "servers": [
-                "https://1.1.1.1/dns-query",
-                "https://8.8.8.8/dns-query",
+                "1.1.1.1",
+                "8.8.8.8",
                 "localhost",
             ],
-            "queryStrategy": "UseIP",
+            "queryStrategy": "UseIPv4",
         },
         "routing": {
-            "domainStrategy": "IPIfNonMatch",
+            "domainStrategy": "AsIs",
             "rules": [
                 {"type": "field", "inboundTag": ["api"], "outboundTag": "api"},
                 {"type": "field", "inboundTag": ["directSocks"], "outboundTag": "direct"},
@@ -205,7 +214,18 @@ def build_client_config(key: dict) -> str:
         },
         "stats": {},
     }
-    return json.dumps(config, ensure_ascii=False, indent=2)
+    return json.dumps(config, ensure_ascii=False, separators=(",", ":"))
+
+
+def local_ports_for_uuid(uuid_value: str) -> tuple[int, int]:
+    seed = int.from_bytes(sha256(uuid_value.encode("utf-8")).digest()[:4], "big")
+    socks_port = 20_000 + (seed % 20_000)
+    api_port = 40_000 + ((seed // 20_000) % 20_000)
+    if socks_port == 1087:
+        socks_port += 1
+    if api_port in (1087, socks_port):
+        api_port += 1
+    return socks_port, api_port
 
 
 def build_vless_uri(key: dict) -> str:
