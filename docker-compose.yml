@@ -6,6 +6,5 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      - /opt/outline/persisted-state/shadowbox_server_config.json:/opt/outline/persisted-state/shadowbox_server_config.json
-      - /opt/outline/persisted-state/shadowbox_config.json:/opt/outline/persisted-state/shadowbox_config.json
+      - /usr/local/x-ui/bin/config.json:/usr/local/x-ui/bin/config.json
     restart: unless-stopped

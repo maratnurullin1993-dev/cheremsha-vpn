@@ -6,7 +6,7 @@ import uuid
 from urllib.parse import quote, urlencode
 
 from app.config import get_settings
-from app import db, outline_file, xray
+from app import db, xray
 
 
 class VpnProvisioningError(RuntimeError):
@@ -27,10 +27,7 @@ def last_provisioning_error() -> str | None:
 
 def config_status() -> dict:
     settings = get_settings()
-    if settings.vpn_backend_value() == "outline_file":
-        return outline_file.config_status()
     values = {
-        "VPN_BACKEND": settings.vpn_backend_value(),
         "VPN_PROTOCOL": settings.vpn_protocol.strip(),
         "VPN_HOST": settings.vpn_host.strip(),
         "VPN_PORT": settings.vpn_port,
@@ -66,36 +63,7 @@ def validate_vpn_config() -> None:
 
 
 def build_access_uri(key: dict) -> str:
-    if get_settings().vpn_backend_value() == "outline_file":
-        return build_outline_uri(key)
     return build_vless_uri(key)
-
-
-def build_outline_uri(key: dict) -> str:
-    label = key.get("label") or label_for_user(key)
-    outline_key = {
-        **key,
-        "password": key.get("password") or key.get("public_key"),
-        "method": key.get("method") or key.get("flow") or outline_file.DEFAULT_METHOD,
-        "host": key.get("host") or key.get("server_host"),
-        "port": key.get("port") or key.get("server_port"),
-    }
-    if key.get("uuid") and not outline_key.get("password"):
-        user_id = key.get("user_id") or key.get("id")
-        persisted = db.get_active_key(user_id) if user_id else None
-        runtime_key = outline_file.access_key_by_id(key["uuid"])
-        if persisted:
-            outline_key.update(
-                {
-                    "password": persisted.get("public_key"),
-                    "method": persisted.get("flow") or outline_key["method"],
-                    "host": persisted.get("server_host") or outline_key.get("host"),
-                    "port": persisted.get("server_port") or outline_key.get("port"),
-                }
-            )
-        if runtime_key:
-            outline_key.update(runtime_key)
-    return outline_file.build_ss_uri(outline_key, label)
 
 
 def build_vless_uri(key: dict) -> str:
@@ -169,38 +137,22 @@ def create_or_replace_user_key(user: dict, days: int | None = None, traffic_limi
         return db.extend_user_access(user["id"], days or settings.default_days, traffic_limit_gb)
 
     if user.get("uuid"):
-        remove_backend_key(user["uuid"])
+        xray.remove_client(user["uuid"])
         db.mark_user_disabled(user["id"])
 
+    key_uuid = str(uuid.uuid4())
     token = secrets.token_urlsafe(32)
     active_days = days or settings.default_days
     limit_gb = traffic_limit_gb if traffic_limit_gb is not None else user.get("traffic_limit")
     label = label_for_user(user)
+    pending_user = {
+        **user,
+        "uuid": key_uuid,
+        "subscription_token": token,
+        "traffic_limit": limit_gb,
+    }
     try:
-        if settings.vpn_backend_value() == "outline_file":
-            backend_key = outline_file.add_access_key(user)
-            key_uuid = str(backend_key["id"])
-            server_host = backend_key["host"]
-            server_port = backend_key["port"]
-            public_key = backend_key["password"]
-            flow = backend_key["method"]
-            short_id = ""
-            sni = ""
-        else:
-            key_uuid = str(uuid.uuid4())
-            pending_user = {
-                **user,
-                "uuid": key_uuid,
-                "subscription_token": token,
-                "traffic_limit": limit_gb,
-            }
-            xray.add_client(pending_user)
-            server_host = settings.vpn_host
-            server_port = settings.vpn_port
-            public_key = settings.vpn_public_key
-            flow = settings.vpn_flow
-            short_id = settings.vpn_short_id
-            sni = settings.reality_sni()
+        xray.add_client(pending_user)
         updated = db.set_user_key(
             user_id=user["id"],
             uuid_value=key_uuid,
@@ -213,18 +165,17 @@ def create_or_replace_user_key(user: dict, days: int | None = None, traffic_limi
             uuid_value=key_uuid,
             label=label,
             subscription_token=token,
-            server_host=server_host,
-            server_port=server_port,
-            sni=sni,
-            public_key=public_key,
-            short_id=short_id,
-            flow=flow,
+            server_host=settings.vpn_host,
+            server_port=settings.vpn_port,
+            sni=settings.reality_sni(),
+            public_key=settings.vpn_public_key,
+            short_id=settings.vpn_short_id,
+            flow=settings.vpn_flow,
             days=active_days,
             traffic_limit_gb=limit_gb,
         )
     except Exception as error:
-        if "key_uuid" in locals():
-            remove_backend_key(key_uuid)
+        xray.remove_client(key_uuid)
         set_last_provisioning_error(error)
         raise
     ensure_configured_key(updated)
@@ -235,19 +186,15 @@ def create_or_replace_user_key(user: dict, days: int | None = None, traffic_limi
 def ensure_configured_key(user: dict) -> None:
     if not user.get("uuid"):
         raise VpnProvisioningError("VPN key UUID is missing")
-    uri = build_access_uri(user)
-    if get_settings().vpn_backend_value() == "outline_file":
-        if not uri.startswith("ss://"):
-            raise VpnProvisioningError("Generated Outline URI is invalid")
-    else:
-        if f"@:{get_settings().vpn_port}" in uri:
-            raise VpnProvisioningError("Generated VLESS URI is invalid")
-        if get_settings().vpn_security_value() != "reality" and any(part in uri for part in ("pbk=", "sni=", "sid=", "flow=")):
-            raise VpnProvisioningError("Generated non-Reality VLESS URI contains Reality-only parameters")
-        if get_settings().vpn_security_value() == "reality" and ("pbk=&" in uri or "sni=&" in uri or "sid=&" in uri):
-            raise VpnProvisioningError("Generated Reality VLESS URI is invalid")
-    if not has_backend_key(user["uuid"]):
-        raise VpnProvisioningError("VPN backend client is missing")
+    uri = build_vless_uri(user)
+    if f"@:{get_settings().vpn_port}" in uri:
+        raise VpnProvisioningError("Generated VLESS URI is invalid")
+    if get_settings().vpn_security_value() != "reality" and any(part in uri for part in ("pbk=", "sni=", "sid=", "flow=")):
+        raise VpnProvisioningError("Generated non-Reality VLESS URI contains Reality-only parameters")
+    if get_settings().vpn_security_value() == "reality" and ("pbk=&" in uri or "sni=&" in uri or "sid=&" in uri):
+        raise VpnProvisioningError("Generated Reality VLESS URI is invalid")
+    if not xray.has_client(user["uuid"]):
+        raise VpnProvisioningError("VPN backend client is missing in Xray config")
 
 
 def latest_key_debug() -> dict | None:
@@ -265,15 +212,14 @@ def latest_key_debug() -> dict | None:
 def activate_or_extend_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
     active_days = days or get_settings().default_days
     if db.user_vpn_status(user) == "active" and user.get("uuid"):
-        if not has_backend_key(user["uuid"]):
-            return recreate_user_key(user, active_days, traffic_limit_gb)
+        ensure_configured_key(user)
         return db.extend_user_access(user["id"], active_days, traffic_limit_gb)
     return create_or_replace_user_key(user, active_days, traffic_limit_gb)
 
 
 def recreate_user_key(user: dict, days: int | None = None, traffic_limit_gb: int | None = None) -> dict:
     if user.get("uuid"):
-        remove_backend_key(user["uuid"])
+        xray.remove_client(user["uuid"])
         db.mark_user_disabled(user["id"])
         user = db.get_user(user["id"]) or user
     return create_or_replace_user_key(user, days, traffic_limit_gb)
@@ -281,13 +227,13 @@ def recreate_user_key(user: dict, days: int | None = None, traffic_limit_gb: int
 
 def disable_user_key(user: dict) -> dict:
     if user.get("uuid"):
-        remove_backend_key(user["uuid"])
+        xray.remove_client(user["uuid"])
     return db.mark_user_disabled(user["id"])
 
 
 def delete_user_key(user: dict) -> dict:
     if user.get("uuid"):
-        remove_backend_key(user["uuid"])
+        xray.remove_client(user["uuid"])
     db.mark_user_disabled(user["id"])
     return db.delete_user_key(user["id"])
 
@@ -319,14 +265,10 @@ def xray_client_payload(user: dict) -> dict:
 
 
 def remove_backend_key(key_id: str) -> dict:
-    if get_settings().vpn_backend_value() == "outline_file":
-        return outline_file.remove_access_key(key_id)
     return xray.remove_client(key_id)
 
 
 def has_backend_key(key_id: str) -> bool:
-    if get_settings().vpn_backend_value() == "outline_file":
-        return outline_file.has_access_key(key_id)
     return xray.has_client(key_id)
 
 

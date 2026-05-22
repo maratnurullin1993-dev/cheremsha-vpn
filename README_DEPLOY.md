@@ -54,7 +54,6 @@ ADMIN_IDS=218032420,996045307
 ADMIN_API_TOKEN=change_me_to_long_random_value
 WEBAPP_URL=https://your-domain.example
 PUBLIC_BASE_URL=https://your-domain.example
-VPN_BACKEND=outline_file
 VPN_PROTOCOL=vless
 VPN_HOST=78.17.76.184
 VPN_PORT=8443
@@ -64,9 +63,6 @@ VPN_WS_PATH=/
 VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
 XRAY_RESTART_COMMAND=
-OUTLINE_SERVER_CONFIG_PATH=/opt/outline/persisted-state/shadowbox_server_config.json
-OUTLINE_CONFIG_PATH=/opt/outline/persisted-state/shadowbox_config.json
-OUTLINE_RESTART_COMMAND=
 MAX_USERS=20
 ```
 
@@ -114,24 +110,32 @@ In Docker/VPS it is read from `.env` through `docker-compose.yml`.
 
 ## Personal VPN Keys
 
-Each Telegram user has at most one active VPN key. The active device/key id is stored on the user record in SQLite and is used to build the user's personal connection link, QR code, expiry date, and traffic counters.
+Each Telegram user has at most one active VPN UUID. The active UUID is stored on the user record in SQLite and is used to build the user's personal VLESS link, QR code, expiry date, and traffic counters.
 
-When a user already has an active key, the app reuses that key and shows the existing key data. It must not create a new key on every login or every mini app open: doing that would leave old clients in the VPN backend, break existing device profiles, and inflate the active key count.
+When a user already has an active key, the app reuses that UUID and shows the existing key data. It must not create a new UUID on every login or every mini app open: doing that would leave old clients in Xray, break existing device profiles, and inflate the active key count.
 
-When access is expired or disabled, a new paid activation can create a new key. On creation the app writes the key to the configured VPN backend, stores the key in SQLite, optionally runs the backend restart command, and returns the personal connection link.
+When access is expired or disabled, a new paid activation can create a new UUID. On creation the app adds the UUID to the existing x-ui/Xray inbound in `XRAY_CONFIG_PATH`, stores the key in SQLite, optionally runs `XRAY_RESTART_COMMAND`, and returns the personal VLESS link.
 
-For the current Outline/Shadowbox file-backed backend, use:
+For the current x-ui VLESS over WebSocket inbound, use:
 
 ```env
-VPN_BACKEND=outline_file
-OUTLINE_SERVER_CONFIG_PATH=/opt/outline/persisted-state/shadowbox_server_config.json
-OUTLINE_CONFIG_PATH=/opt/outline/persisted-state/shadowbox_config.json
-OUTLINE_RESTART_COMMAND=
+VPN_PROTOCOL=vless
+VPN_HOST=78.17.76.184
+VPN_PORT=8443
+VPN_NETWORK=ws
+VPN_SECURITY=none
+VPN_WS_PATH=/
+VPN_FLOW=
+XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
 ```
 
-The app reads `hostname` and `portForNewAccessKeys` from `shadowbox_server_config.json`, takes `nextId` from `shadowbox_config.json`, appends a new `accessKey`, increments `nextId`, and generates an `ss://` link for the user.
+The app does not create or modify inbounds. It only appends/removes clients in the existing inbound matching `protocol=vless` and `port=8443`.
 
-For legacy Xray only, set `VPN_BACKEND=xray` and configure `XRAY_CONFIG_PATH`.
+Generated link format:
+
+```text
+vless://UUID@78.17.76.184:8443?type=ws&security=none&path=%2F&encryption=none#NAME
+```
 
 ## Test Admin Access Without Stars
 
@@ -185,7 +189,7 @@ User card actions:
 - delete VPN key/device
 - show/copy VPN key
 
-The delete action disables the device/key through the existing VPN disable path. With `VPN_BACKEND=outline_file`, the access key is removed from `shadowbox_config.json`; with legacy Xray, the UUID is removed from the Xray config.
+The delete action disables the device/key through the existing VPN disable path and removes the UUID from the Xray `settings.clients` array.
 
 ## Update Through `git pull`
 

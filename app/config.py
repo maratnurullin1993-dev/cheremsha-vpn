@@ -26,7 +26,6 @@ class Settings(BaseSettings):
 
     database_path: str = "data/app.sqlite3"
 
-    vpn_backend: str = "xray"
     vpn_node_name: str = "Personal Node"
     vpn_country: str = "NL"
     vpn_protocol: str = "vless"
@@ -44,9 +43,6 @@ class Settings(BaseSettings):
 
     xray_config_path: str = ""
     xray_restart_command: str = ""
-    outline_server_config_path: str = ""
-    outline_config_path: str = ""
-    outline_restart_command: str = ""
 
     max_users: int = 20
     max_active_keys: int = 20
@@ -70,9 +66,6 @@ class Settings(BaseSettings):
 
     def vpn_security_value(self) -> str:
         return self.vpn_security.strip().lower()
-
-    def vpn_backend_value(self) -> str:
-        return self.vpn_backend.strip().lower()
 
     def subscription_base_url(self) -> str:
         public_url = self.public_base_url.strip().rstrip("/")

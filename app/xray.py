@@ -109,6 +109,8 @@ def has_client(uuid_value: str) -> bool:
 
     config = _load_config(path)
     for inbound in config.get("inbounds", []):
+        if not _matches_target_inbound(inbound):
+            continue
         clients = inbound.get("settings", {}).get("clients")
         if not isinstance(clients, list):
             continue
@@ -129,6 +131,8 @@ def remove_client(uuid_value: str) -> dict[str, Any]:
     config = _load_config(path)
     removed = 0
     for inbound in config.get("inbounds", []):
+        if not _matches_target_inbound(inbound):
+            continue
         clients = inbound.get("settings", {}).get("clients")
         if not isinstance(clients, list):
             continue
