@@ -43,7 +43,18 @@ class Settings(BaseSettings):
 
     xray_config_path: str = ""
     xui_db_path: str = ""
+    xui_api_base_url: str = ""
+    xui_api_username: str = ""
+    xui_api_password: str = ""
+    xui_api_inbound_id: int | None = 1
     xray_restart_command: str = ""
+
+    @field_validator("xui_api_inbound_id", mode="before")
+    @classmethod
+    def default_xui_api_inbound_id(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
     max_users: int = 20
     max_active_keys: int = 20

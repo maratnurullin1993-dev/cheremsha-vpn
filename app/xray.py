@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from app import xui_db
+from app import xui_api, xui_db
 from app.config import get_settings
 
 SAFE_NOOP_COMMANDS = {"", "systemctl restart x-ui"}
@@ -39,6 +39,10 @@ def _matches_target_inbound(inbound: dict[str, Any]) -> bool:
 
 def add_client(user: dict) -> dict[str, Any]:
     settings = get_settings()
+    if xui_api.is_configured():
+        result = xui_api.add_client(user)
+        return {**result, "restart": {"status": "handled_by_xui_api"}}
+
     if xui_db.is_configured():
         if not xui_db.exists():
             raise RuntimeError(f"x-ui database not found: {settings.xui_db_path}")
@@ -91,6 +95,12 @@ def add_client(user: dict) -> dict[str, Any]:
 
 
 def ws_path_from_config() -> str:
+    if xui_api.is_configured():
+        try:
+            return xui_api.ws_path_from_api()
+        except Exception:
+            return ""
+
     if xui_db.exists():
         return xui_db.ws_path_from_db()
 
@@ -115,6 +125,9 @@ def ws_path_from_config() -> str:
 
 
 def has_client(uuid_value: str) -> bool:
+    if xui_api.is_configured():
+        return xui_api.has_client(uuid_value)
+
     if xui_db.is_configured():
         return xui_db.has_client(uuid_value)
 
@@ -139,6 +152,10 @@ def has_client(uuid_value: str) -> bool:
 
 
 def remove_client(uuid_value: str) -> dict[str, Any]:
+    if xui_api.is_configured():
+        result = xui_api.remove_client(uuid_value)
+        return {**result, "restart": {"status": "handled_by_xui_api"}}
+
     if xui_db.is_configured():
         result = xui_db.remove_client(uuid_value)
         if result.get("removed"):

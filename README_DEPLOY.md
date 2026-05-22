@@ -63,6 +63,10 @@ VPN_WS_PATH=/
 VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
 XUI_DB_PATH=/etc/x-ui/x-ui.db
+XUI_API_BASE_URL=http://host.docker.internal:2053
+XUI_API_USERNAME=your_xui_username
+XUI_API_PASSWORD=your_xui_password
+XUI_API_INBOUND_ID=1
 XRAY_RESTART_COMMAND=
 MAX_USERS=20
 ```
@@ -115,7 +119,7 @@ Each Telegram user has at most one active VPN UUID. The active UUID is stored on
 
 When a user already has an active key, the app reuses that UUID and shows the existing key data. It must not create a new UUID on every login or every mini app open: doing that would leave old clients in Xray, break existing device profiles, and inflate the active key count.
 
-When access is expired or disabled, a new paid activation can create a new UUID. On creation the app adds the UUID to the existing x-ui inbound in `XUI_DB_PATH`, stores the key in SQLite, optionally runs `XRAY_RESTART_COMMAND`, and returns the personal VLESS link. `XRAY_CONFIG_PATH` is kept only as a fallback/debug path.
+When access is expired or disabled, a new paid activation can create a new UUID. On creation the app logs in to x-ui Web API, calls `addClient` for `XUI_API_INBOUND_ID`, verifies that the client exists, stores the key in SQLite, and returns the personal VLESS link. Direct DB/config writes are fallback/debug only and must not be the production path.
 
 For the current x-ui VLESS over WebSocket inbound, use:
 
@@ -129,9 +133,13 @@ VPN_WS_PATH=/
 VPN_FLOW=
 XRAY_CONFIG_PATH=/usr/local/x-ui/bin/config.json
 XUI_DB_PATH=/etc/x-ui/x-ui.db
+XUI_API_BASE_URL=http://host.docker.internal:2053
+XUI_API_USERNAME=your_xui_username
+XUI_API_PASSWORD=your_xui_password
+XUI_API_INBOUND_ID=1
 ```
 
-The app does not create or modify inbounds. It only appends/removes clients in the existing x-ui DB inbound matching `protocol=vless` and `port=8443`.
+The app does not create or modify inbounds. It only uses the x-ui Web API to append/remove clients in the existing inbound `id=1`, `protocol=vless`, `port=8443`.
 
 Generated link format:
 
