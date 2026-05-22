@@ -10,6 +10,8 @@ from app.config import get_settings
 
 def get_plan(plan_id: str) -> dict | None:
     settings = get_settings()
+    # TODO: these GB limits are stored and shown in the app; x-ui totalGB remains unchanged
+    # until traffic accounting is verified end to end.
     plans = {
         "7d": {
             "days": 7,

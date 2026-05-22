@@ -22,7 +22,7 @@ def start_keyboard() -> InlineKeyboardMarkup:
     settings = get_settings()
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="РћС‚РєСЂС‹С‚СЊ VPN", web_app=WebAppInfo(url=settings.webapp_url))]
+            [InlineKeyboardButton(text="Открыть VPN", web_app=WebAppInfo(url=settings.webapp_url))]
         ]
     )
 
@@ -83,7 +83,7 @@ def is_admin_callback(callback: CallbackQuery) -> bool:
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     upsert_from_message(message)
-    await message.answer("Р§Р•Р Р•РњРЁРђ VPN", reply_markup=start_keyboard())
+    await message.answer("ЧЕРЕМША VPN", reply_markup=start_keyboard())
 
 
 @router.message(Command("admin"))

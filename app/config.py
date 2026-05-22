@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     bot_username: str = ""
     telegram_bot_url: str = "https://t.me/"
     telegram_proxy_url: str = ""
-    admin_id: int = 0
+    admin_id: str = ""
     admin_ids: str = ""
     admin_api_token: str = Field(default="change_me")
 
@@ -87,11 +87,12 @@ class Settings(BaseSettings):
         return webapp_url or public_url
 
     def admin_id_values(self) -> set[int]:
-        values = {self.admin_id} if self.admin_id else set()
-        for raw_id in self.admin_ids.split(","):
-            raw_id = raw_id.strip()
-            if raw_id:
-                values.add(int(raw_id))
+        values: set[int] = set()
+        for raw_ids in (self.admin_id, self.admin_ids):
+            for raw_id in str(raw_ids).split(","):
+                raw_id = raw_id.strip()
+                if raw_id and raw_id != "0":
+                    values.add(int(raw_id))
         return values
 
     def is_admin(self, telegram_id: int) -> bool:
