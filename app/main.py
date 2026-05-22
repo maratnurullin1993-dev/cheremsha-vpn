@@ -324,14 +324,11 @@ async def delete_key(key_id: int, user: dict = Depends(current_user)) -> dict:
 
 @app.get("/api/keys/{key_id}/qr")
 async def key_qr(key_id: int, user: dict = Depends(current_user)) -> Response:
-    if key_id != user["id"] or not user.get("uuid"):
+    if key_id != user["id"] or not user.get("uuid") or not user.get("subscription_token"):
         raise HTTPException(status_code=404, detail="Key not found")
     if db.user_vpn_status(user) != "active":
         raise HTTPException(status_code=403, detail="VPN inactive")
-    qr_payload = vpn.build_client_config(user)
-    copy_payload = decorate_vpn_user(user).get("vpn_config")
-    if qr_payload != copy_payload:
-        raise HTTPException(status_code=500, detail="QR payload does not match VPN config")
+    qr_payload = f"https://www.clubru.ru/sub/{user['subscription_token']}"
     png = make_qr_png(qr_payload)
     return Response(content=png, media_type="image/png")
 
