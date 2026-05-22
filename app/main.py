@@ -328,7 +328,7 @@ async def key_qr(key_id: int, user: dict = Depends(current_user)) -> Response:
         raise HTTPException(status_code=404, detail="Key not found")
     if db.user_vpn_status(user) != "active":
         raise HTTPException(status_code=403, detail="VPN inactive")
-    png = make_qr_png(vpn.build_access_uri(user))
+    png = make_qr_png(vpn.build_client_config(user))
     return Response(content=png, media_type="image/png")
 
 
@@ -370,7 +370,7 @@ async def subscription(token: str) -> PlainTextResponse:
     user = db.get_user_by_subscription_token(token)
     if not user or db.user_vpn_status(user) != "active":
         raise HTTPException(status_code=404, detail="Subscription not found")
-    return PlainTextResponse(vpn.build_subscription(user))
+    return PlainTextResponse(vpn.build_subscription(user), media_type="application/json")
 
 
 @app.get("/api/admin/users", dependencies=[Depends(require_admin_token)])

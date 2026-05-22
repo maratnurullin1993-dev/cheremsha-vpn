@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import secrets
 import uuid
@@ -154,6 +153,7 @@ def build_client_config(key: dict) -> str:
                     "security": "none",
                     "wsSettings": {"path": path},
                 },
+                "mux": {"enabled": False},
             },
             {
                 "tag": "fragment",
@@ -227,8 +227,7 @@ def build_vless_uri(key: dict) -> str:
 
 
 def build_subscription(key: dict) -> str:
-    payload = build_access_uri(key).encode("utf-8")
-    return base64.b64encode(payload).decode("ascii")
+    return build_client_config(key)
 
 
 def subscription_url(token: str) -> str:
