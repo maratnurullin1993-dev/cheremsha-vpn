@@ -125,10 +125,10 @@ def build_client_config(key: dict) -> str:
             },
             {
                 "tag": "api",
-                "listen": "::1",
+                "listen": "[::1]",
                 "port": api_port,
                 "protocol": "dokodemo-door",
-                "settings": {"address": "::1"},
+                "settings": {"address": "[::1]"},
             },
         ],
         "outbounds": [
@@ -155,7 +155,7 @@ def build_client_config(key: dict) -> str:
                 "streamSettings": {
                     "network": "ws",
                     "security": "none",
-                    "wsSettings": {"path": path},
+                    "wsSettings": {"path": path, "headers": {"Host": ""}},
                 },
                 "mux": {
                     "enabled": False,
@@ -169,34 +169,31 @@ def build_client_config(key: dict) -> str:
                 "protocol": "freedom",
                 "settings": {
                     "domainStrategy": "UseIP",
+                    "userLevel": 8,
                     "fragment": {
                         "packets": "tlshello",
                         "length": "80-250",
                         "interval": "10-100",
                     },
                 },
+                "streamSettings": {"sockopt": {"tcpNoDelay": True}},
             },
             {"tag": "direct", "protocol": "freedom", "settings": {"domainStrategy": "UseIP"}},
-            {"tag": "block", "protocol": "blackhole", "settings": {"response": {"type": "http"}}},
-            {"tag": "dns-out", "protocol": "dns"},
         ],
         "dns": {
-            "servers": [
-                "1.1.1.1",
-                "8.8.8.8",
-                "localhost",
-            ],
-            "queryStrategy": "UseIPv4",
+            "hosts": {},
+            "servers": [{"address": "8.8.8.8", "skipFallback": False}],
+            "queryStrategy": "UseIP",
+            "disableFallback": True,
+            "disableCache": True,
+            "disableFallbackIfMatch": True,
         },
         "routing": {
             "domainStrategy": "AsIs",
             "rules": [
                 {"type": "field", "inboundTag": ["api"], "outboundTag": "api"},
+                {"type": "field", "inboundTag": ["dnsQuery"], "outboundTag": "proxy"},
                 {"type": "field", "inboundTag": ["directSocks"], "outboundTag": "direct"},
-                {"type": "field", "port": 53, "network": "udp,tcp", "outboundTag": "dns-out"},
-                {"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"},
-                {"type": "field", "protocol": ["bittorrent"], "outboundTag": "block"},
-                {"type": "field", "inboundTag": ["socks"], "outboundTag": "proxy"},
             ],
         },
         "api": {
