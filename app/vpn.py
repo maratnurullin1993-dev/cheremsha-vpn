@@ -86,89 +86,100 @@ def build_access_uri(key: dict) -> str:
 
 
 def build_client_config(key: dict) -> str:
-    settings = get_settings()
-    label = key.get("label") or label_for_user(key)
-    host = settings.vpn_host or key.get("server_host")
-    port = settings.vpn_port or key.get("server_port")
-    path = settings.vpn_ws_path.strip() or xray.ws_path_from_config() or "/"
-    if not key.get("uuid") or not is_valid_uuid(key.get("uuid")) or not host or not port:
+    if not key.get("uuid") or not is_valid_uuid(key.get("uuid")):
         raise VpnProvisioningError("Generated Xray client config is invalid")
 
     socks_port, api_port = local_ports_for_uuid(key["uuid"])
     config = {
-        "log": {"loglevel": "warning"},
-        "remarks": label,
+        "log": {},
         "inbounds": [
             {
                 "tag": "socks",
-                "listen": "127.0.0.1",
-                "port": socks_port,
-                "protocol": "socks",
-                "settings": {"auth": "noauth", "udp": True},
-                "sniffing": {
-                    "enabled": True,
-                    "destOverride": ["http", "tls", "quic"],
-                    "routeOnly": False,
+                "settings": {
+                    "udp": True,
+                    "userLevel": 8,
+                    "auth": "noauth",
                 },
+                "listen": "127.0.0.1",
+                "sniffing": {
+                    "destOverride": [
+                        "tls",
+                        "http",
+                        "quic",
+                    ],
+                    "domainsExcluded": [
+                        "courier.push.apple.com",
+                    ],
+                    "enabled": True,
+                },
+                "protocol": "socks",
+                "port": socks_port,
             },
             {
                 "tag": "directSocks",
                 "listen": "127.0.0.1",
-                "port": 1087,
-                "protocol": "socks",
-                "settings": {"auth": "noauth", "udp": True},
-                "sniffing": {
-                    "enabled": True,
-                    "destOverride": ["http", "tls", "quic"],
-                    "routeOnly": False,
+                "settings": {
+                    "udp": True,
+                    "userLevel": 8,
+                    "auth": "noauth",
                 },
+                "protocol": "socks",
+                "port": 1087,
             },
             {
                 "tag": "api",
                 "listen": "[::1]",
-                "port": api_port,
-                "protocol": "dokodemo-door",
                 "settings": {"address": "[::1]"},
+                "protocol": "dokodemo-door",
+                "port": api_port,
             },
         ],
         "outbounds": [
             {
-                "tag": "proxy",
-                "protocol": "vless",
                 "settings": {
                     "vnext": [
                         {
-                            "address": host,
-                            "port": int(port),
+                            "address": "78.17.76.184",
+                            "port": 8443,
                             "users": [
                                 {
                                     "email": "",
                                     "level": 8,
-                                    "id": key["uuid"],
                                     "encryption": "none",
                                     "flow": "",
+                                    "id": key["uuid"],
                                 }
                             ],
                         }
                     ]
                 },
-                "streamSettings": {
-                    "network": "ws",
-                    "security": "none",
-                    "wsSettings": {"path": path, "headers": {"Host": ""}},
-                },
+                "protocol": "vless",
                 "mux": {
-                    "enabled": False,
-                    "concurrency": 50,
-                    "xudpConcurrency": 128,
                     "xudpProxyUDP443": "allow",
+                    "enabled": False,
+                    "xudpConcurrency": 128,
+                    "concurrency": 50,
                 },
+                "streamSettings": {
+                    "wsSettings": {
+                        "path": "/",
+                        "headers": {
+                            "Host": "",
+                        },
+                    },
+                    "network": "ws",
+                },
+                "tag": "proxy",
             },
             {
+                "streamSettings": {
+                    "sockopt": {
+                        "tcpNoDelay": True,
+                    }
+                },
                 "tag": "fragment",
                 "protocol": "freedom",
                 "settings": {
-                    "domainStrategy": "UseIP",
                     "userLevel": 8,
                     "fragment": {
                         "packets": "tlshello",
@@ -176,40 +187,79 @@ def build_client_config(key: dict) -> str:
                         "interval": "10-100",
                     },
                 },
-                "streamSettings": {"sockopt": {"tcpNoDelay": True}},
             },
-            {"tag": "direct", "protocol": "freedom", "settings": {"domainStrategy": "UseIP"}},
         ],
-        "dns": {
-            "hosts": {},
-            "servers": [{"address": "8.8.8.8", "skipFallback": False}],
-            "queryStrategy": "UseIP",
-            "disableFallback": True,
-            "disableCache": True,
-            "disableFallbackIfMatch": True,
-        },
-        "routing": {
-            "domainStrategy": "AsIs",
-            "rules": [
-                {"type": "field", "inboundTag": ["api"], "outboundTag": "api"},
-                {"type": "field", "inboundTag": ["dnsQuery"], "outboundTag": "proxy"},
-                {"type": "field", "inboundTag": ["directSocks"], "outboundTag": "direct"},
-            ],
-        },
         "api": {
             "tag": "api",
-            "services": ["HandlerService", "LoggerService", "StatsService"],
+            "services": [
+                "StatsService",
+            ],
         },
-        "policy": {
-            "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
-            "system": {
-                "statsInboundUplink": True,
-                "statsInboundDownlink": True,
-                "statsOutboundUplink": True,
-                "statsOutboundDownlink": True,
-            },
+        "dns": {
+            "servers": [
+                {
+                    "skipFallback": False,
+                    "address": "8.8.8.8",
+                }
+            ],
+            "tag": "dnsQuery",
+            "disableCache": True,
+            "hosts": {},
+            "disableFallbackIfMatch": True,
+            "queryStrategy": "UseIP",
+            "disableFallback": True,
         },
         "stats": {},
+        "routing": {
+            "rules": [
+                {
+                    "inboundTag": [
+                        "api",
+                    ],
+                    "type": "field",
+                    "outboundTag": "api",
+                    "ruleTag": "rule-0",
+                },
+                {
+                    "inboundTag": [
+                        "dnsQuery",
+                    ],
+                    "type": "field",
+                    "outboundTag": "proxy",
+                    "ruleTag": "rule-1",
+                },
+                {
+                    "inboundTag": [
+                        "directSocks",
+                    ],
+                    "type": "field",
+                    "outboundTag": "direct",
+                    "ruleTag": "rule-2",
+                },
+            ],
+            "balancers": [],
+            "domainStrategy": "AsIs",
+        },
+        "policy": {
+            "levels": {
+                "8": {
+                    "bufferSize": 0,
+                    "connIdle": 30,
+                    "downlinkOnly": 1,
+                    "uplinkOnly": 1,
+                    "statsUserDownlink": False,
+                    "handshake": 4,
+                    "statsUserUplink": False,
+                }
+            },
+            "system": {
+                "statsOutboundUplink": True,
+                "statsOutboundDownlink": True,
+                "statsInboundDownlink": True,
+                "statsInboundUplink": True,
+            },
+        },
+        "transport": {},
     }
     return json.dumps(config, ensure_ascii=False, separators=(",", ":"))
 
