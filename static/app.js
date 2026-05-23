@@ -7,6 +7,7 @@ const state = {
   key: null,
   adminUsers: [],
   selectedAdminUser: null,
+  adminLoadingUserId: null,
   adminDebug: null,
   devices: [],
   plans: [],
@@ -141,20 +142,30 @@ function adminName(user) {
   return escapeHtml(user.username || user.first_name || `telegram ${user.telegram_user_id}`);
 }
 
+function formatTrafficAmount(value, empty = "0 MB") {
+  if (value === null || value === undefined) return empty;
+  const gb = Number(value);
+  if (!Number.isFinite(gb)) return empty;
+  if (gb > 0 && gb < 1) return `${Math.round(gb * 1024)} MB`;
+  if (gb === 0) return "0 MB";
+  const rounded = gb >= 10 || Number.isInteger(gb) ? Math.round(gb) : Math.round(gb * 10) / 10;
+  return `${rounded} GB`;
+}
+
 function formatTraffic(user) {
-  const limit = user.traffic_limit_gb ?? "∞";
-  return `${user.used_traffic_gb ?? 0} / ${limit} GB`;
+  return `${formatTrafficAmount(user.used_traffic_gb)} / ${formatTrafficAmount(user.traffic_limit_gb, "∞")}`;
 }
 
 function renderAdminUsers() {
   $("adminUsersList").innerHTML = state.adminUsers
     .map(
       (user) => `
-        <button class="admin-user-row" data-admin-user="${user.id}">
+        <button class="admin-user-row ${state.adminLoadingUserId === user.id ? "loading" : ""}" data-admin-user="${user.id}" type="button" ${state.adminLoadingUserId === user.id ? "disabled" : ""}>
           <strong>${adminName(user)}</strong>
           <span>ID: ${user.telegram_user_id} · ${user.status}</span>
           <span>До: ${formatDate(user.expires_at)} · Трафик: ${formatTraffic(user)}</span>
           <span>Device/key: ${user.device_id || user.key_id || "нет"}</span>
+          ${state.adminLoadingUserId === user.id ? '<span class="admin-row-loader">Загрузка...</span>' : ""}
         </button>
       `,
     )
@@ -165,29 +176,49 @@ function renderAdminDebug() {
   const debug = state.adminDebug;
   if (!debug) {
     $("adminDebug").innerHTML = "";
-    setVisible("adminDebug", false);
+    setVisible("adminDebug", true);
     return;
   }
   const missing = debug.env?.missing?.length ? debug.env.missing.join(", ") : "none";
   const lastKey = debug.latest_key?.uuid || "none";
-  const hasDebugInfo = !debug.env?.ok || debug.env?.missing?.length || debug.latest_key || debug.last_provisioning_error;
-  if (!hasDebugInfo) {
-    $("adminDebug").innerHTML = "";
-    setVisible("adminDebug", false);
-    return;
-  }
+  const system = debug.system || {};
+  const disk = system.disk?.total_gb ? `${system.disk.used_gb} / ${system.disk.total_gb} GB` : system.disk?.message || "TODO";
+  const ram = system.ram?.total_mb ? `${system.ram.used_mb} / ${system.ram.total_mb} MB` : system.ram?.message || "TODO";
+  const cpu = system.cpu?.load_1m !== undefined ? `${system.cpu.load_1m}, ${system.cpu.load_5m}, ${system.cpu.load_15m}` : system.cpu?.message || "TODO";
+  const uptime = system.app_uptime_seconds ? `${Math.floor(system.app_uptime_seconds / 60)} мин` : "меньше минуты";
   $("adminDebug").innerHTML = `
-    <strong>VPN backend</strong>
-    <span class="admin-meta">Env complete: ${debug.env?.ok ? "yes" : "no"}</span>
-    <span class="admin-meta">Missing: ${missing}</span>
-    <span class="admin-meta">Last key/device: ${lastKey}</span>
-    <span class="admin-meta">Last error: ${debug.last_provisioning_error || "none"}</span>
+    <details class="diagnostics">
+      <summary>Диагностика</summary>
+      <div class="diagnostics-grid">
+        <span class="admin-meta">VPN backend status: ${system.vpn_backend_status || (debug.env?.ok ? "ok" : "config error")}</span>
+        <span class="admin-meta">x-ui API status: ${system.xui_api_status || "unknown"}</span>
+        <span class="admin-meta">xray status: ${system.xray_status || "unknown"}</span>
+        <span class="admin-meta">Last error: ${debug.last_provisioning_error || "none"}</span>
+        <span class="admin-meta">Last key/device UUID: ${lastKey}</span>
+        <span class="admin-meta">Active users count: ${debug.active_users_count ?? 0}</span>
+        <span class="admin-meta">Occupied slots: ${debug.occupied_slots || `${debug.capacity?.active ?? 0} / ${debug.capacity?.max ?? 20}`}</span>
+        <span class="admin-meta">Users in DB: ${debug.users_count ?? "unknown"}</span>
+        <span class="admin-meta">CPU: ${cpu}</span>
+        <span class="admin-meta">RAM: ${ram}</span>
+        <span class="admin-meta">Disk: ${disk}</span>
+        <span class="admin-meta">Uptime: ${uptime}</span>
+        <span class="admin-meta">Missing env: ${missing}</span>
+      </div>
+    </details>
   `;
   setVisible("adminDebug", true);
 }
 
 function renderAdminUserCard() {
   const user = state.selectedAdminUser;
+  if (state.adminLoadingUserId && !user) {
+    $("adminUserCard").innerHTML = `
+      <strong>Загрузка пользователя...</strong>
+      <div class="admin-card-loader"></div>
+    `;
+    setVisible("adminUserCard", true);
+    return;
+  }
   if (!user) {
     setVisible("adminUserCard", false);
     return;
@@ -202,9 +233,9 @@ function renderAdminUserCard() {
     <div class="admin-actions">
       <button class="secondary" data-admin-action="grant-test">Выдать тестовый доступ</button>
       <button class="secondary" data-admin-action="renew-7d">Продлить на 7 дней</button>
-      <button class="secondary" data-admin-action="copy-key">Показать/скопировать VPN ключ</button>
       <button class="secondary danger" data-admin-action="disable">Отключить доступ</button>
       <button class="secondary danger" data-admin-action="delete-key">Удалить VPN ключ/device</button>
+      <button class="secondary danger" data-admin-action="recreate-key">Сбросить ключ</button>
     </div>
   `;
   setVisible("adminUserCard", true);
@@ -223,37 +254,45 @@ function renderPlans() {
     .join("");
 }
 
-function deviceText(deviceId) {
-  const copy = {
-    iphone: {
-      app: "FoXray или Streisand",
-      text: "Открой приложение, отсканируй QR-код на экране или вставь автоссылку. Затем включи подключение.",
-    },
-    android: {
-      app: "v2rayNG",
-      text: "Открой приложение, вставь автоссылку из буфера обмена и включи подключение.",
-    },
-    windows: {
-      app: "Nekoray",
-      text: "Открой приложение, добавь автоссылку и нажми подключиться.",
-    },
-  };
-  return copy[deviceId] || copy.iphone;
-}
-
 function renderHelp() {
-  const devices = state.devices.filter((device) => ["iphone", "android", "windows"].includes(device.id));
-  $("deviceTabs").innerHTML = devices
-    .map((device) => `<button class="tab ${device.id === state.selectedDevice ? "active" : ""}" data-device="${device.id}">${device.title}</button>`)
+  const appButtons = state.devices
+    .flatMap((device) => [
+      { title: device.app, url: device.app_url },
+      { title: device.secondary_app, url: device.secondary_app_url },
+    ])
+    .filter((item) => item.title)
+    .map((item) =>
+      item.url
+        ? `<a class="app-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>`
+        : `<button class="app-link placeholder" type="button" disabled>${escapeHtml(item.title)} · URL не задан</button>`,
+    )
     .join("");
-
-  const selected = devices.find((device) => device.id === state.selectedDevice) || devices[0];
-  if (!selected) return;
-
-  const info = deviceText(selected.id);
+  $("deviceTabs").innerHTML = "";
   $("deviceHelp").innerHTML = `
-    <p>${info.text}</p>
-    <span>Рекомендуемое приложение: ${info.app}</span>
+    <div class="app-links">${appButtons}</div>
+    <h3>Основной способ</h3>
+    <ol>
+      <li>Скачай V2Box.</li>
+      <li>Нажми «Автоссылка».</li>
+      <li>Открой ссылку в V2Box.</li>
+      <li>Нажми импорт.</li>
+      <li>Включи VPN.</li>
+    </ol>
+    <h3>Запасной способ QR</h3>
+    <ol>
+      <li>Открой V2Box.</li>
+      <li>Нажми сканер QR.</li>
+      <li>Наведи на QR-код в мини-приложении.</li>
+      <li>Импортируй и включи.</li>
+    </ol>
+    <h3>Если не получилось</h3>
+    <ol>
+      <li>Нажми «Скопировать VPN».</li>
+      <li>Открой V2Box.</li>
+      <li>Нажми «+».</li>
+      <li>Выбери импорт из буфера/clipboard.</li>
+      <li>Включи VPN.</li>
+    </ol>
   `;
 }
 
@@ -369,8 +408,8 @@ async function openAdmin() {
   if (!state.user?.is_admin) return;
   $("adminModal").classList.remove("hidden");
   $("adminModal").setAttribute("aria-hidden", "false");
-  await loadAdminDebug();
   await loadAdminUsers();
+  await loadAdminDebug();
 }
 
 function closeAdmin() {
@@ -381,24 +420,34 @@ function closeAdmin() {
 }
 
 async function openAdminUser(userId) {
-  const data = await api(`/api/admin/panel/users/${userId}`);
-  state.selectedAdminUser = data.user;
+  const numericUserId = Number(userId);
+  state.adminLoadingUserId = numericUserId;
+  state.selectedAdminUser = null;
+  renderAdminUsers();
   renderAdminUserCard();
+  try {
+    const data = await api(`/api/admin/panel/users/${numericUserId}`);
+    state.selectedAdminUser = data.user;
+  } catch (error) {
+    console.error(error);
+    toast(error.message || "Ошибка");
+  } finally {
+    state.adminLoadingUserId = null;
+    renderAdminUsers();
+    renderAdminUserCard();
+  }
 }
 
 async function adminAction(action) {
   const user = state.selectedAdminUser;
   if (!user) return;
   try {
-    if (action === "copy-key") {
-      await copyRawText(user.vpn_config, "VPN ключ скопирован");
-      return;
-    }
     const endpoints = {
       "grant-test": { path: `/api/admin/panel/users/${user.id}/grant-test-access`, method: "POST" },
       "renew-7d": { path: `/api/admin/panel/users/${user.id}/renew-7d`, method: "POST" },
       disable: { path: `/api/admin/panel/users/${user.id}/disable`, method: "POST" },
       "delete-key": { path: `/api/admin/panel/users/${user.id}/key`, method: "DELETE" },
+      "recreate-key": { path: `/api/admin/panel/users/${user.id}/recreate-key`, method: "POST" },
     };
     const endpoint = endpoints[action];
     if (!endpoint) return;
@@ -420,6 +469,10 @@ async function adminAction(action) {
 document.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
+  const planButton = target.closest("[data-plan]");
+  const adminUserButton = target.closest("[data-admin-user]");
+  const adminActionButton = target.closest("[data-admin-action]");
+  const deviceButton = target.closest("[data-device]");
 
   if (target.id === "getKeyBtn") await getKey();
   if (target.id === "openAdminBtn") await openAdmin();
@@ -429,12 +482,12 @@ document.addEventListener("click", async (event) => {
   if (target.dataset.closeModal !== undefined) closeHelp();
   if (target.dataset.closePlans !== undefined) closePlans();
   if (target.dataset.closeAdmin !== undefined) closeAdmin();
-  if (target.dataset.plan) await buyPlan(target.dataset.plan);
-  if (target.dataset.adminUser) await openAdminUser(target.dataset.adminUser);
-  if (target.dataset.adminAction) await adminAction(target.dataset.adminAction);
+  if (planButton) await buyPlan(planButton.dataset.plan);
+  if (adminUserButton) await openAdminUser(adminUserButton.dataset.adminUser);
+  if (adminActionButton) await adminAction(adminActionButton.dataset.adminAction);
   if (target.dataset.support !== undefined && state.supportUrl) window.open(state.supportUrl, "_blank");
-  if (target.dataset.device) {
-    state.selectedDevice = target.dataset.device;
+  if (deviceButton) {
+    state.selectedDevice = deviceButton.dataset.device;
     renderHelp();
   }
 });

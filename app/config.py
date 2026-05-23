@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     default_30d_traffic_gb: int = 50
 
     support_url: str = "https://t.me/"
+    v2box_ios_url: str = ""
+    v2raytun_ios_url: str = ""
+    v2raytun_android_url: str = ""
 
     @field_validator("vpn_port", mode="before")
     @classmethod

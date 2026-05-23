@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
+import time
 from contextlib import asynccontextmanager
 
 import httpx
@@ -77,6 +80,7 @@ def _log_bot_task_result(task: asyncio.Task) -> None:
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+STARTED_AT = time.time()
 
 app.add_middleware(
     CORSMiddleware,
@@ -158,10 +162,16 @@ async def admin_panel_users(admin: dict = Depends(require_telegram_admin_user)) 
 
 @app.get("/api/admin/panel/debug")
 async def admin_panel_debug(admin: dict = Depends(require_telegram_admin_user)) -> dict:
+    capacity = capacity_summary()
     return {
         "env": vpn.config_status(),
         "latest_key": vpn.latest_key_debug(),
         "last_provisioning_error": vpn.last_provisioning_error(),
+        "capacity": capacity,
+        "users_count": db.users_count(),
+        "active_users_count": capacity["active"],
+        "occupied_slots": f"{capacity['active']} / {capacity['max']}",
+        "system": system_diagnostics(),
     }
 
 
@@ -347,13 +357,17 @@ async def devices() -> dict:
             {
                 "id": "iphone",
                 "title": "iPhone",
-                "app": "",
+                "app": "V2Box",
+                "app_url": settings.v2box_ios_url,
+                "secondary_app": "V2RayTun iOS",
+                "secondary_app_url": settings.v2raytun_ios_url,
                 "steps": "Отсканируй QR-код или вставь скопированную ссылку, затем включи подключение.",
             },
             {
                 "id": "android",
                 "title": "Android",
-                "app": "",
+                "app": "V2RayTun Android",
+                "app_url": settings.v2raytun_android_url,
                 "steps": "Вставь скопированную ссылку в приложение для VPN и включи подключение.",
             },
             {
@@ -543,4 +557,52 @@ def capacity_summary() -> dict:
         "max": max_keys,
         "available": max(max_keys - active, 0),
         "is_full": active >= max_keys,
+    }
+
+
+def system_diagnostics() -> dict:
+    disk = None
+    memory = None
+    cpu = {"status": "todo", "message": "CPU metrics are not configured"}
+    try:
+        usage = shutil.disk_usage("/")
+        disk = {
+            "total_gb": round(usage.total / (1024**3), 1),
+            "used_gb": round(usage.used / (1024**3), 1),
+            "free_gb": round(usage.free / (1024**3), 1),
+        }
+    except OSError:
+        disk = {"status": "todo", "message": "Disk metrics are unavailable"}
+
+    try:
+        load = os.getloadavg()
+        cpu = {"load_1m": round(load[0], 2), "load_5m": round(load[1], 2), "load_15m": round(load[2], 2)}
+    except (AttributeError, OSError):
+        pass
+
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as meminfo:
+            values = {}
+            for line in meminfo:
+                key, raw_value = line.split(":", 1)
+                values[key] = int(raw_value.strip().split()[0])
+            total = values.get("MemTotal")
+            available = values.get("MemAvailable")
+            if total and available:
+                memory = {
+                    "total_mb": round(total / 1024),
+                    "used_mb": round((total - available) / 1024),
+                    "available_mb": round(available / 1024),
+                }
+    except (OSError, ValueError, KeyError):
+        memory = {"status": "todo", "message": "RAM metrics are unavailable"}
+
+    return {
+        "vpn_backend_status": "ok" if vpn.config_status()["ok"] else "config error",
+        "xui_api_status": "configured" if settings.xui_api_base_url.strip() else "not configured",
+        "xray_status": "configured" if settings.xray_config_path else "not configured",
+        "app_uptime_seconds": int(time.time() - STARTED_AT),
+        "cpu": cpu,
+        "ram": memory,
+        "disk": disk,
     }

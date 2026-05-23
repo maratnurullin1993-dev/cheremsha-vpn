@@ -386,7 +386,19 @@ h2 {
   display: grid;
   gap: 4px;
   min-height: 0;
+  position: relative;
   text-align: left;
+  touch-action: manipulation;
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.admin-user-row * {
+  pointer-events: none;
+}
+
+.admin-user-row.loading {
+  opacity: 0.74;
 }
 
 .admin-user-row span,
@@ -396,11 +408,57 @@ h2 {
   line-height: 1.45;
 }
 
+.admin-row-loader,
+.admin-card-loader {
+  color: var(--cyan);
+  font-size: 13px;
+}
+
+.admin-card-loader {
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  height: 26px;
+  margin-top: 8px;
+  width: 26px;
+  animation: spin 850ms linear infinite;
+}
+
 .admin-actions {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr;
   margin-top: 12px;
+}
+
+.diagnostics summary {
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  touch-action: manipulation;
+}
+
+.diagnostics summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostics summary::after {
+  content: "+";
+  color: var(--cyan);
+  margin-left: auto;
+}
+
+.diagnostics[open] summary::after {
+  content: "-";
+}
+
+.diagnostics-grid {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
 }
 
 .section-title {
@@ -520,10 +578,51 @@ h2 {
   margin: 0 0 12px;
 }
 
+.device-help h3 {
+  font-size: 15px;
+  margin: 18px 0 8px;
+}
+
+.device-help ol {
+  margin: 0 0 12px 20px;
+  padding: 0;
+}
+
+.device-help li {
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
 .device-help span {
   color: var(--muted);
   display: block;
   font-size: 14px;
+}
+
+.app-links {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.app-link {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.075);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  font-weight: 800;
+  min-height: 48px;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.app-link.placeholder {
+  justify-content: flex-start;
+  min-height: 48px;
+  opacity: 0.7;
+  width: 100%;
 }
 
 .plans-list {
@@ -564,6 +663,12 @@ h2 {
 .toast.show {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 390px) {
