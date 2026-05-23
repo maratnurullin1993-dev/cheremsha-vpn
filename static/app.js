@@ -382,14 +382,15 @@ async function buyPlan(planId) {
 }
 
 function openHelp() {
-  renderHelp();
-  $("helpModal").classList.remove("hidden");
-  $("helpModal").setAttribute("aria-hidden", "false");
+  if (tg?.openLink) {
+    tg.openLink(`${window.location.origin}/help`);
+    return;
+  }
+  window.location.href = "/help";
 }
 
 function closeHelp() {
-  $("helpModal").classList.add("hidden");
-  $("helpModal").setAttribute("aria-hidden", "true");
+  return;
 }
 
 async function loadAdminUsers() {

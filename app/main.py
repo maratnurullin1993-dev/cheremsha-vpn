@@ -98,6 +98,31 @@ async def index() -> FileResponse:
     return FileResponse("static/index.html")
 
 
+@app.get("/help")
+async def help_index() -> FileResponse:
+    return FileResponse("static/help.html")
+
+
+@app.get("/help/ios")
+async def help_ios() -> FileResponse:
+    return FileResponse("static/help_ios.html")
+
+
+@app.get("/help/android")
+async def help_android() -> FileResponse:
+    return FileResponse("static/help_android.html")
+
+
+@app.get("/help/windows")
+async def help_windows() -> FileResponse:
+    return FileResponse("static/help_windows.html")
+
+
+@app.get("/help/macos")
+async def help_macos() -> FileResponse:
+    return FileResponse("static/help_macos.html")
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
