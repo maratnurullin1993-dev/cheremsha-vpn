@@ -690,3 +690,6 @@ h2 {
 .help-card { display:block; text-decoration:none; color:var(--text); background: var(--panel); border:1px solid var(--line); border-radius: 8px; padding:16px; }
 .help-block { background: var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin: 12px 0; }
 @media (max-width: 560px){ .help-card-grid{grid-template-columns:1fr;} }
+.help-alert { background: rgba(167, 238, 233, 0.08); border: 1px solid rgba(167, 238, 233, 0.32); border-radius: 8px; padding: 12px; margin: 10px 0 12px; }
+.help-alert p { margin: 0 0 10px; line-height: 1.42; }
+.help-alert p:last-child { margin-bottom: 0; }
