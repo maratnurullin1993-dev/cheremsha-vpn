@@ -462,12 +462,13 @@ def ensure_user_key(user: dict) -> dict:
 
 
 def xray_client_payload(user: dict) -> dict:
+    limit_gb = user.get("traffic_limit") or 0
     return {
         "id": user["uuid"],
         "flow": get_settings().vpn_flow,
         "email": f"telegram_{user['telegram_id']}",
         "limitIp": 0,
-        "totalGB": user.get("traffic_limit") or 0,
+        "totalGB": int(limit_gb) * (1024**3) if limit_gb else 0,
         "expiryTime": user.get("expires_at"),
         "enable": db.user_vpn_status(user) == "active",
     }

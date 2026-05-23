@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import db, payments, vpn
+from app import db, payments, vpn, xui_db
 from app.auth import current_user, require_admin_token, require_telegram_admin_user
 from app.config import get_settings
 from app.qr import make_qr_png
@@ -521,10 +521,22 @@ def decorate_vpn_user(user: dict | None) -> dict | None:
     decorated["is_active"] = status == "active"
     decorated["label"] = vpn.label_for_user(user)
     limit = user.get("traffic_limit")
-    used = user.get("used_traffic") or 0
+    limit_bytes = int(limit * (1024**3)) if limit is not None else None
+    traffic = xui_db.read_client_traffic(user["telegram_id"], user.get("uuid"))
+    used_bytes = int(traffic["used_bytes"])
+    up_bytes = int(traffic["up_bytes"])
+    down_bytes = int(traffic["down_bytes"])
+    remaining_bytes = None if limit_bytes is None else max(limit_bytes - used_bytes, 0)
+    if limit_bytes is not None and used_bytes >= limit_bytes:
+        decorated["status"] = "traffic_exhausted"
+        decorated["is_active"] = False
     decorated["traffic_limit_gb"] = limit
-    decorated["used_traffic_gb"] = used
-    decorated["remaining_traffic_gb"] = None if limit is None else max(limit - used, 0)
+    decorated["used_traffic_gb"] = round(used_bytes / (1024**3), 2)
+    decorated["remaining_traffic_gb"] = None if remaining_bytes is None else round(remaining_bytes / (1024**3), 2)
+    decorated["up_bytes"] = up_bytes
+    decorated["down_bytes"] = down_bytes
+    decorated["used_bytes"] = used_bytes
+    decorated["remaining_bytes"] = remaining_bytes
     if user.get("uuid"):
         try:
             decorated["vless_uri"] = vpn.build_access_uri(decorated)
@@ -557,6 +569,10 @@ def admin_user_summary(user: dict) -> dict:
         "expires_at": user.get("expires_at"),
         "traffic_limit_gb": decorated["traffic_limit_gb"],
         "used_traffic_gb": decorated["used_traffic_gb"],
+        "up_bytes": decorated["up_bytes"],
+        "down_bytes": decorated["down_bytes"],
+        "used_bytes": decorated["used_bytes"],
+        "remaining_bytes": decorated["remaining_bytes"],
         "key_id": active_key["id"] if active_key else None,
         "device_id": active_key["id"] if active_key else None,
         "uuid": user.get("uuid"),

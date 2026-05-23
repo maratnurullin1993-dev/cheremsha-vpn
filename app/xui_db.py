@@ -26,6 +26,13 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _connect_readonly() -> sqlite3.Connection:
+    db_uri = f"file:{_path()}?mode=ro"
+    conn = sqlite3.connect(db_uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def _json_loads(value: Any, fallback: Any) -> Any:
     if value in (None, ""):
         return fallback
@@ -89,12 +96,13 @@ def ws_path_from_db() -> str:
 
 
 def _client_payload(user: dict) -> dict[str, Any]:
+    limit_gb = user.get("traffic_limit") or 0
     client = {
         "id": user["uuid"],
         "email": f"telegram_{user['telegram_id']}",
         "flow": "",
         "enable": True,
-        "totalGB": 0,
+        "totalGB": int(limit_gb) * (1024**3) if limit_gb else 0,
         "expiryTime": 0,
         "limitIp": 0,
     }
@@ -152,3 +160,46 @@ def remove_client(uuid_value: str) -> dict[str, Any]:
             )
             conn.commit()
     return {"status": "ok", "removed": removed, "backend": "xui_db"}
+
+
+def _email_from_inbound_client_uuid(conn: sqlite3.Connection, uuid_value: str) -> str | None:
+    try:
+        row = _find_inbound(conn)
+        settings_json = _json_loads(row["settings"], {})
+        clients = settings_json.get("clients") or []
+        if not isinstance(clients, list):
+            return None
+        for client in clients:
+            if str(client.get("id")) == str(uuid_value):
+                email = client.get("email")
+                return str(email) if email else None
+    except Exception:
+        return None
+    return None
+
+
+def read_client_traffic(telegram_id: int, uuid_value: str | None = None) -> dict[str, int | str | None]:
+    if not exists():
+        return {"email": None, "up_bytes": 0, "down_bytes": 0, "used_bytes": 0}
+    primary_email = f"telegram_{telegram_id}"
+    with _connect_readonly() as conn:
+        columns = _columns(conn, "client_traffics")
+        required = {"email", "up", "down"}
+        if not required.issubset(columns):
+            raise RuntimeError(f"x-ui table client_traffics is missing required columns: {sorted(required - columns)}")
+        row = conn.execute(
+            "SELECT email, up, down FROM client_traffics WHERE email = ? LIMIT 1",
+            (primary_email,),
+        ).fetchone()
+        email_used = primary_email
+        if not row and uuid_value:
+            mapped_email = _email_from_inbound_client_uuid(conn, uuid_value)
+            if mapped_email:
+                row = conn.execute(
+                    "SELECT email, up, down FROM client_traffics WHERE email = ? LIMIT 1",
+                    (mapped_email,),
+                ).fetchone()
+                email_used = mapped_email
+        up = int(row["up"]) if row and row["up"] is not None else 0
+        down = int(row["down"]) if row and row["down"] is not None else 0
+        return {"email": email_used if row else None, "up_bytes": up, "down_bytes": down, "used_bytes": up + down}

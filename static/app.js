@@ -100,13 +100,19 @@ function setVisible(id, visible) {
 
 function renderAccess() {
   const active = hasAccess();
-  const remaining = state.key?.remaining_traffic_gb;
+  const usedBytes = state.key?.used_bytes || 0;
+  const limitGb = state.key?.traffic_limit_gb;
   document.querySelector(".status-orbit").classList.toggle("inactive", !active);
   $("statusText").textContent = statusLabel();
   $("expiryLine").textContent = `Доступ до: ${formatDate(state.key?.expires_at)}`;
   $("expiryLine").classList.toggle("hidden", !active);
-  $("trafficLine").textContent = `Осталось трафика: ${remaining ?? "∞"} GB`;
+  const usedLabel = usedBytes < 1024 ** 3 ? `${Math.round(usedBytes / (1024 ** 2))} MB` : `${(usedBytes / (1024 ** 3)).toFixed(2)} GB`;
+  const limitLabel = limitGb == null ? "∞" : `${limitGb} GB`;
+  $("trafficLine").textContent = `Трафик: ${usedLabel} / ${limitLabel}`;
   $("trafficLine").classList.toggle("hidden", !active);
+  if (state.key?.status === "traffic_exhausted") {
+    $("trafficLine").textContent = "Лимит трафика исчерпан";
+  }
   if (state.capacity) {
     $("capacityLine").textContent = `Мест занято: ${state.capacity.active} / ${state.capacity.max}`;
   }
@@ -153,7 +159,10 @@ function formatTrafficAmount(value, empty = "0 MB") {
 }
 
 function formatTraffic(user) {
-  return `${formatTrafficAmount(user.used_traffic_gb)} / ${formatTrafficAmount(user.traffic_limit_gb, "∞")}`;
+  const usedBytes = Number(user.used_bytes || 0);
+  const usedLabel = usedBytes < 1024 ** 3 ? `${Math.round(usedBytes / (1024 ** 2))} MB` : `${(usedBytes / (1024 ** 3)).toFixed(2)} GB`;
+  const limitLabel = user.traffic_limit_gb == null ? "∞" : `${user.traffic_limit_gb} GB`;
+  return `${usedLabel} / ${limitLabel}`;
 }
 
 function renderAdminUsers() {
@@ -228,7 +237,10 @@ function renderAdminUserCard() {
     <div class="admin-meta">Telegram ID: ${user.telegram_user_id}</div>
     <div class="admin-meta">Статус: ${user.status}</div>
     <div class="admin-meta">До: ${formatDate(user.expires_at)}</div>
-    <div class="admin-meta">Трафик: ${formatTraffic(user)}</div>
+    <div class="admin-meta">Upload: ${formatTrafficAmount((user.up_bytes || 0) / (1024 ** 3))}</div>
+    <div class="admin-meta">Download: ${formatTrafficAmount((user.down_bytes || 0) / (1024 ** 3))}</div>
+    <div class="admin-meta">Used: ${formatTraffic(user)}</div>
+    <div class="admin-meta">Remaining: ${user.remaining_bytes == null ? "∞" : formatTrafficAmount(user.remaining_bytes / (1024 ** 3))}</div>
     <div class="admin-meta">Device/key: ${user.device_id || user.key_id || "нет"}</div>
     <div class="admin-actions">
       <button class="secondary" data-admin-action="grant-test">Выдать тестовый доступ</button>

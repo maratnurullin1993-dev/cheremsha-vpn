@@ -22,12 +22,13 @@ def _base_url() -> str:
 
 
 def _client_payload(user: dict) -> dict[str, Any]:
+    limit_gb = user.get("traffic_limit") or 0
     client = {
         "id": user["uuid"],
         "flow": "",
         "email": f"telegram_{user['telegram_id']}",
         "limitIp": 0,
-        "totalGB": 0,
+        "totalGB": int(limit_gb) * (1024**3) if limit_gb else 0,
         "expiryTime": 0,
         "enable": True,
         "tgId": "",
