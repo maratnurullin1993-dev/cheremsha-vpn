@@ -13,6 +13,7 @@ const state = {
   plans: [],
   capacity: null,
   supportUrl: "",
+  starsTopupUrl: "https://t.me/zStarsBot",
   selectedDevice: "iphone",
   initData: tg?.initData || "",
 };
@@ -346,6 +347,9 @@ async function loadPlans() {
   state.plans = data.plans;
   state.capacity = data.capacity;
   state.supportUrl = data.support_url;
+  state.starsTopupUrl = data.stars_topup_url || "https://t.me/zStarsBot";
+  const topupLink = $("starsTopupLink");
+  if (topupLink) topupLink.href = state.starsTopupUrl;
   renderPlans();
   renderAccess();
 }

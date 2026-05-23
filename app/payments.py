@@ -10,18 +10,16 @@ from app.config import get_settings
 
 def get_plan(plan_id: str) -> dict | None:
     settings = get_settings()
-    # TODO: these GB limits are stored and shown in the app; x-ui totalGB remains unchanged
-    # until traffic accounting is verified end to end.
     plans = {
         "7d": {
             "days": 7,
-            "stars": 49,
+            "stars": 50,
             "traffic_limit_gb": settings.default_7d_traffic_gb,
             "title": "7 дней",
         },
         "30d": {
             "days": 30,
-            "stars": 149,
+            "stars": 150,
             "traffic_limit_gb": settings.default_30d_traffic_gb,
             "title": "30 дней",
         },
@@ -76,3 +74,4 @@ async def create_stars_invoice(user: dict, plan_id: str) -> dict:
     invoice_link = data["result"]
     payment = db.attach_invoice_link(payment["id"], invoice_link)
     return {"invoice_link": invoice_link, "payment": payment, "plan": plan}
+
